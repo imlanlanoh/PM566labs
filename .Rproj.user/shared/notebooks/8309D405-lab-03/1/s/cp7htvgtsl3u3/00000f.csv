@@ -1,3 +1,0 @@
-"0","met <- met[met$temp>-15, ]"
-"0","met2 <- met[order(met$temp), ]"
-"0","head(met2)"

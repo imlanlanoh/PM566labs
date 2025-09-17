@@ -1,4 +1,0 @@
-"0","library(leaflet)"
-"0","leaflet(elev) %>%"
-"0","  addProviderTiles('OpenStreetMap') %>% "
-"0","  addCircles(lat=~lat,lng=~lon, opacity=1, fillOpacity=1, radius=100)"
