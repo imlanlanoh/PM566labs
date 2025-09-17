@@ -137,7 +137,6 @@ corr_mat <- cor(corr_df, use = "complete.obs")
 
 corrplot(corr_mat, method = "color", type = "upper", addCoef.col = "black",
          tl.col = "black", tl.srt = 45)
-
 ```
 
 
