@@ -1,0 +1,26 @@
+# R session history
+.Rhistory
+.RData
+.Ruserdata
+
+# RStudio project files
+.Rproj.user/
+
+# R Markdown / Quarto cache and intermediates
+*_cache/
+_cache/
+*.knit.md
+*.utf8.md
+
+# Quarto/R Markdown output
+# *.html
+# *.pdf
+*.docx
+
+# Data files
+*.gz
+
+# Temporary files
+.DS_Store
+*.tmp
+*.log
