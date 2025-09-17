@@ -1,0 +1,180 @@
+---
+title: "PM566 Lab 1"
+author: "Chih-Chan Jessica Lan"
+format: 
+  html:
+    theme: litera
+    embed-resources: true
+fig-width: 8
+fig-height: 6
+editor: visual
+---
+
+## Input Library and Data
+
+```{r}
+library(datasauRus)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+df <- datasaurus_dozen
+```
+
+## Question 1
+
+Based on the help file, how many rows and how many columns does the datasaurus_dozen file have? What are the variables included in the data frame? Add your responses to your lab report, with relevant code in the associated R code chunk, and free-form text outside of the code chunk.
+
+### Answer:
+
+There are 1846 rows and 3 columns in the datasaurus_dozen file. The 3 variable names include: dataset, x, and y
+
+```{r}
+dim(df)
+# cat("Dimension of dataset:", dim(df), "\n")
+# print('Names of columns in the dataset:', names(df))
+```
+
+Summary of dataset names: There are 13 datasets
+
+```{r}
+table(datasaurus_dozen$dataset)
+
+```
+
+Summary of Continuous Variables (x and y)
+
+```{r}
+# Variable x
+summary(df$x)
+# Variable y
+summary(df$y)
+```
+
+## Question 2
+
+Plot y vs. x for the dino dataset. Then, calculate the correlation coefficient between x and y for just this dataset.
+
+### Plot
+
+```{r}
+dino_data <- df[df$dataset == 'dino', ]
+```
+
+```{r}
+plot(dino_data$x, dino_data$y)
+```
+
+```{r}
+ggplot(data = dino_data, mapping = aes(x = x, y = y)) +
+  geom_point() +
+  theme_bw()
+
+```
+
+Reference: https://stackoverflow.com/questions/10861773/remove-grid-background-color-and-top-and-right-borders-from-ggplot2
+
+```{r}
+dino_data_eye <- dino_data %>%
+  mutate(
+    eye_category = case_when(
+      x >= 40 & x <= 60 & y >= 75 & y <= 88 ~ "Eye",
+      TRUE ~ "Other"
+    )
+  )
+
+ggplot(dino_data_eye, aes(x = x, y = y, color = eye_category)) +
+  geom_point() +
+  scale_color_manual(values = c("Eye" = "red", "Other" = "gray70")) +
+  theme_bw()
+```
+
+### Calculate correlation coefficient (r)
+
+```{r}
+cor(dino_data$x, dino_data$y)
+# dino_data |>
+#   summarize(r = cor(x, y))
+```
+
+## Question 3
+
+Now try it on your own! Plot y vs. x for the star dataset, another one of the datasaurus_dozen. You can (and should) re-use code we introduced above, just replace the dataset name with the desired dataset. Then, calculate the correlation coefficient between x and y for this dataset. How does this value compare to the r of dino?
+
+```{r}
+star_data <- df[df$dataset == "star", ]
+```
+
+###Plot
+
+```{r}
+plot(star_data$x, star_data$y)
+```
+
+### Calculate correlation coefficient (r)
+
+```{r}
+cor(star_data$x, star_data$y)
+```
+
+The correlation coefficients (r) of star and dino data are almost the same around -0.06. Although the rs are similar, the visualization plots actually show a significant difference. This is showing that visualizing data is also critical when we are diving into given data.
+
+## Question 4
+
+Plot y vs. x for the circle dataset. You can (and should) reuse code we introduced above, just replace the dataset name with the desired dataset. Then, calculate the correlation coefficient between x and y for this dataset. How does this value compare to the r of dino?
+
+```{r}
+circle_data <- df[df$dataset == "circle", ]
+
+```
+
+### Plot
+
+```{r}
+plot(circle_data$x, circle_data$y)
+```
+
+### Calculate correlation coefficient (r)
+
+```{r}
+cor(circle_data$x, circle_data$y)
+```
+
+The correlation coefficients (r) of circle and dino data are almost the same around -0.06. Although the rs are similar, the visualization plots actually show a significant difference. This is showing that visualizing data is also critical when we are diving into given data.
+
+## Question 5
+
+```{r}
+#| fig-height: 10
+#| fig-width: 10
+par(mar = c(2,2,2,2))
+layout(matrix(1:16, nrow=4, ncol=4))
+for(name in unique(datasaurus_dozen$dataset)){
+  subset <- datasaurus_dozen[datasaurus_dozen$dataset == name, ]
+  plot(subset$x, subset$y, main = name)
+}
+layout(1)
+# Assign back to default value
+par(mar = c(5,4,4,2) + 0.1)
+```
+
+```{r}
+#| fig-height: 8
+#| fig-width: 8
+ggplot(datasaurus_dozen, aes(x = x, y = y, color = dataset))+
+  geom_point() +
+  theme_bw() +
+  facet_wrap(~ dataset, ncol = 3) +
+  theme(legend.position = "none")
+```
+
+## Question 6
+
+Finally, we want to calculate the correlation between the x and y variables for all 13 datasets. Like before, we will use a loop, but this time, since we want to return a specific value every time through the loop, we will use the sapply function. sapply is useful way to apply a function to every element of a vector. In this case, we provide the vector of unique dataset names (like before) and then our own custom function. This function subsets the data as before, and then returns the correlation coefficient as the output of the function.
+
+```{r}
+sapply(unique(df$dataset), function(name){
+    subset <- df[df$dataset == name, ]
+    return(cor(subset$x, subset$y))
+})
+```

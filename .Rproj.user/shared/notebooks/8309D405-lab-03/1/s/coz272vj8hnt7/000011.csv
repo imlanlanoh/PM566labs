@@ -1,0 +1,8 @@
+"0","library(corrplot)"
+"0",""
+"0","corr_df <- met[, c(""elev"", ""temp"", ""wind.sp"")]"
+"0","corr_mat <- cor(corr_df, use = ""complete.obs"")"
+"0",""
+"0","corrplot(corr_mat, method = ""color"", type = ""upper"", addCoef.col = ""black"","
+"0","         tl.col = ""black"", tl.srt = 45)"
+"0",""

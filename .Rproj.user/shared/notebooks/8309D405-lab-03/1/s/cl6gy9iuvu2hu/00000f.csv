@@ -1,0 +1,1 @@
+"0","plot(elev$date, elev$temp, type='l')"
