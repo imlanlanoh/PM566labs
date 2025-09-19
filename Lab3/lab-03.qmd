@@ -1,7 +1,9 @@
 ---
 title: "PM566 Lab 3"
 author: "Chih-Chan Jessica Lan"
-format: html
+format: 
+  html:
+    embed-resources: true
 editor: visual
 ---
 

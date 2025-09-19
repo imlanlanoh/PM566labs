@@ -19,6 +19,7 @@ _cache/
 
 # Data files
 *.gz
+*.csv
 
 # Temporary files
 .DS_Store
