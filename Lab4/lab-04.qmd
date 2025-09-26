@@ -1,0 +1,161 @@
+---
+title: "PM566 Lab 4"
+author: "Chih-Chan Jessica Lan"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+```{r}
+library(data.table)
+library(leaflet)
+library(tidyverse)
+```
+
+# Step 1: Read in the data
+```{r}
+if (!file.exists("met_all.gz"))
+  download.file(
+    url = "https://raw.githubusercontent.com/USCbiostats/data-science-data/master/02_met/met_all.gz",
+    destfile = "met_all.gz",
+    method   = "libcurl",
+    timeout  = 60
+    )
+met <- data.table::fread("met_all.gz")
+```
+
+# Step 2: Prepare the data
+```{r}
+met <- met[temp > -17][elev == 9999.0, elev := NA]
+
+met <- met[, week := week(as.Date(paste(year, month, day, sep = "-")))]
+
+met <- met[week == min(week, na.rm = T), ]
+
+met_avg <- met[,.(temp = mean(temp, na.rm = T),
+                  rh = mean(rh, na.rm = T),
+                  wind.sp = mean(wind.sp, na.rm = T),
+                  vis.dist = mean(vis.dist, na.rm = T),
+                  dew.point = mean(dew.point, na.rm = T),
+                  lat = mean(lat),
+                  lon = mean(lon),
+                  elev = mean(elev, na.rm = T)),
+               by = "USAFID"]
+
+met_avg$region <- ifelse(met_avg$lon > -98 & met_avg$lat > 39.71, "Northeast",
+                         ifelse(met_avg$lon > -98 & met_avg$lat < 39.71, "Southeast",
+                                ifelse(met_avg$lon < -98 & met_avg$lat > 39.71, "Northwest", "Southwest")))
+
+met_avg$elev_cat <- ifelse(met_avg$elev > 252, "high", "low")
+
+summary(met_avg)
+```
+
+
+# Step 3: Use `geom_violin` to examine the wind speed and dew point by region
+```{r}
+met_avg[!is.na(met_avg$wind.sp) & !is.na(met_avg$region), ] %>%
+  ggplot() + 
+  geom_violin(aes(x = 1, y = wind.sp)) +
+  facet_wrap(~ region, nrow = 2)
+```
+**Description: **
+The violin plots reveal distinct regional patterns in wind speed distribution. The Northeast region shows a generally low wind speed between 0 to 3 m/s with some outliers reaching higher values. The Northwest region has a relatively smooth distribution concentrated around 2–4 m/s, without extreme outliers. The Southeast region exhibits lower wind speeds, mostly around 0–2 m/s, indicating slower wind speed conditions. The Southwest region demonstrates a wider spread with two wind speeds cluster both near 1.5 m/s and around 3–4 m/s. Overall, the Northwest tends to have higher wind speeds on average, while the Southeast shows the most concentrated distribution around 1.5 m/s.
+
+```{r}
+met_avg[!is.na(met_avg$dew.point) & !is.na(met_avg$region), ] %>%
+  ggplot() + 
+  geom_violin(aes(x = 1, y = dew.point)) +
+  facet_wrap(~ region, nrow = 2)
+
+```
+**Description: **
+The violin plots reveal distinct regional patterns in dew point distribution. The Northeast region shows dew points mainly between 10–20°C, with some lower outliers. The Northwest region displays a bimodal distribution, with two peaks clustered around 10°C and 20°C. The Southeast region exhibits a concentrated distribution, with dew points consistently around 21°C. The Southwest region demonstrates a broader and smoother spread, with values centered near 15°C. Overall, the Southeast tends to have the highest and most stable dew points, while the Northwest and Southwest show greater variation.
+
+# Step 4: Use `geom_point` with `stat_smooth` to examine the association between dew point and wind speed by region
+```{r}
+met_avg[!is.na(met_avg$dew.point) & !is.na(met_avg$wind.sp) & !is.na(met_avg$region), ] %>%
+  ggplot(aes(x = dew.point, y = wind.sp, color = region)) +
+  geom_jitter() +
+  stat_smooth(method = lm)
+```
+**Description: **
+The scatter plot demonstrates the relationship between dew point and wind speed across all regions. Most regional regression lines are nearly flat, indicating that wind speed remains relatively stable as dew point increases. However, the Southeast region exhibits a more noticeable positive relationship, suggesting that wind speed tends to rise more clearly with higher dew points.
+
+# Step 5: Use `geom_bar` to create barplots of the weather stations by elevation category colored by region
+```{r}
+met_avg[!is.na(met_avg$elev) & !is.na(met_avg$region), ] %>%
+  ggplot() +
+  geom_bar(aes(elev_cat, fill = (region)), position="dodge") +
+  scale_fill_brewer(palette = "Accent") +
+  labs(title = "Number of Weather Stations by Elevation Category and Region",
+       x = "Elevation Category", y = "Count") +
+  theme_bw()
+```
+**Description: **
+The bar chart reveals significant differences in weather station distribution across regions and elevation categories. The Southeast region has the highest number of stations overall, particularly concentrated at low elevations. The Northeast region shows more stations at high elevations compared to other regions, which likely reflects its mountainous terrain and greater elevation variation. The Northwest region has the fewest total stations but shows a relatively higher proportion at high elevations. This distribution pattern suggests that regional geography strongly influences where weather stations are located.
+
+# Step 6: Use `stat_summary` to examine mean dew point and wind speed by region with standard deviation error bars
+```{r}
+met_avg[!is.na(met_avg$dew.point), ] %>%
+  ggplot(aes(x = region, y = dew.point)) +
+  stat_summary(fun.data = "mean_sdl", geom = "errorbar") +
+  stat_summary(fun.data = "mean_sdl") +
+  labs(title = "Dew Point") +
+  theme_bw()
+
+met_avg[!is.na(met_avg$wind.sp), ] %>%
+  ggplot(aes(x = region, y = wind.sp)) +
+  stat_summary(fun.data = "mean_sdl", geom = "errorbar") +
+  stat_summary(fun.data = "mean_sdl") +
+  labs(title = "Wind Speed") +
+  theme_bw()
+```
+**Description: **
+Dew Point:
+The Southeast region has the highest mean dew point (approximately 21°C), indicating consistently warm and humid atmospheric conditions. The Northwest region shows the lowest mean dew point around 12.5°C, suggesting a cooler and drier climate. The error bars reveal that the Northwest has the most variable conditions, while the Southeast remains more stable, reflecting regional climatic differences.
+
+Wind Speed:
+The Southwest region has the highest mean wind speed (around 3 m/s), indicating generally windier conditions. The Southeast region shows the lowest mean wind speed about 1.8 m/s, suggesting calmer atmospheric conditions. The error bars reveal that the Southwest also exhibits the greatest variability, while the Northeast and Southeast remain more stable.
+
+
+# Step 7: Make a map showing the spatial trend in relative humidity in the US
+```{r}
+met_avg2 <- met_avg[!is.na(rh), ]
+top10 <- met_avg[rank(-rh) <= 10]
+rh_pal = colorNumeric(c('blue', 'purple', 'orange'), domain = met_avg2$rh)
+
+leaflet(met_avg2) %>%
+  addProviderTiles('OpenStreetMap') %>%
+  addCircles(lat = ~lat, lng = ~lon, color = ~rh_pal(rh),
+             label = ~paste0(round(rh, 2), 'rh'), opacity = 1, fillOpacity = 1, radius = 500) %>%
+  addMarkers(lat = ~lat, lng = ~lon, label = ~paste0(round(rh, 2), 'rh'), data = top10) %>%
+  addLegend('bottomleft', pal = rh_pal, values = met_avg2$rh,
+            title = 'Relative Humidity', opacity = 1)
+```
+**Description of the trend in RH across the US: **
+The relative humidity map reveals a clear west-to-east gradient across the United States. The eastern regions show consistently high relative humidity values (70–90%), represented by orange to red colors. The central regions display moderate humidity levels (40–60%), while the western regions exhibit much lower values (below 30%), shown in blue to purple. The top 10 highest relative humidity locations are predominantly located in the Southeast, which reflects the influence of warm oceanic air masses and maritime moisture sources. This pattern demonstrates how geography affect regional humidity distributions.
+
+# Step 8
+```{r}
+library(gganimate)
+
+met_avg[!is.na(met_avg$wind.sp) & !is.na(met_avg$region), ] %>%
+  ggplot(aes(x = 1, y = wind.sp)) + 
+  geom_violin() + 
+  labs(x = NULL, y = "Wind speed",
+       title = "Region: {closest_state}") +
+  theme_bw() +
+  transition_states(
+    states = region,
+    transition_length = 2,
+    state_length = 1,
+    wrap = F
+  ) +
+  enter_fade() +
+  exit_shrink() +
+  ease_aes('sine-in-out')
+
+```
+
