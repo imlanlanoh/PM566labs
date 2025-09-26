@@ -1,0 +1,163 @@
+---
+title: "PM566 Lab 5 - Data Wrangling"
+author: "Chih-Chan Jessica Lan"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+```{r}
+library(data.table)
+library(leaflet)
+library(tidyverse)
+```
+
+# Read in and preprocess the data
+
+```{r}
+met <- read.csv("~/Documents/2025.09 Fall/PM566/PM566labs/met_all.gz")
+```
+
+```{r}
+# Download the data
+stations <- read.csv("https://noaa-isd-pds.s3.amazonaws.com/isd-history.csv")
+stations$USAF <- as.integer(stations$USAF)
+
+# Dealing with blanks and 999999
+stations$USAF[stations$USAF == 999999] <- NA
+stations$CTRY[stations$CTRY == ""] <- NA
+stations$STATE[stations$STATE == ""] <- NA
+
+# Selecting the three relevant columns, and keeping unique records
+stations <- unique(stations[, c('USAF', 'CTRY', 'STATE')])
+
+# Dropping NAs
+stations <- stations[!is.na(stations$USAF), ]
+
+# Removing duplicates
+stations <- stations[order(stations$USAF, stations$CTRY, stations$STATE), ]
+stations <- stations[!duplicated(stations$USAF), ]
+```
+
+```{r}
+met <- met[met$temp > -17 | is.na(met$temp), ]
+met$elev[met$elev == 9999.0] <- NA
+
+met$week <- as.numeric(format(as.Date(paste(met$year, met$month, met$ day, sep = "-")), "%U"))
+met <- met[met$week == min(met$week, na.rm = T), ]
+
+met_avg <- aggregate(cbind(temp, rh, wind.sp, vis.dist, dew.point, lat, lon, 
+                           elev, atm.press) ~ USAFID, data = met, FUN = mean,
+                     na.ro = TRUE)
+
+met_avg$region <- ifelse(met_avg$lon > -98 & met_avg$lat > 39.71, "Northeast",
+                         ifelse(met_avg$lon > -98 & met_avg$lat < 39.71, "Southeast",
+                                ifelse(met_avg$lon < -98 & met_avg$lat > 39.71, "Northwest", "Southwest")))
+
+met_avg$elev_cat <- ifelse(met_avg$elev > 252, "high", "low")
+```
+
+# Question 1: Representative station for the US
+
+```{r}
+temp_median <- quantile(met_avg$temp, 0.5, na.rm = T)
+wind_median <- quantile(met_avg$wind.sp, 0.5, na.rm = T)
+atm_median <- quantile(met_avg$atm.press, 0.5, na.rm = T)
+
+temp_station <- met_avg$USAFID[which.min(abs(met_avg$temp - temp_median))]
+wind_station <- met_avg$USAFID[which.min(abs(met_avg$wind.sp - wind_median))]
+atm_station <- met_avg$USAFID[which.min(abs(met_avg$atm.press - atm_median))]
+
+c(temp_station, wind_station, atm_station)
+```
+
+**Answer**: The three stations do not coincide.
+
+# Question 2: Representative station per state
+
+```{r}
+met_stations <- merge(met_avg, stations, by.x = "USAFID", by.y = "USAF")
+
+state_medians <- aggregate(cbind(lat, lon) ~ STATE, data = met_stations,
+                           FUN = median, na.rm = T)
+
+state_medians
+```
+
+# Question 3: In the middle?
+
+```{r}
+library(leaflet)
+
+state_means <- aggregate(cbind(lat, lon) ~ STATE, data = met_stations,
+                         FUN = mean, na.rm = T)
+
+closest_stations <- merge(met_stations, state_means, by = "STATE", 
+                          suffixes = c("", "_mean"))
+
+closest_stations$distance <- sqrt((closest_stations$lat - closest_stations$lat_mean)^2 + (closest_stations$lon - closest_stations$lon_mean)^2)
+
+closest_by_state <- do.call(rbind, lapply(split(closest_stations,
+                                                closest_stations$STATE),
+                                          function(x) x[which.min(x$distance), ]))
+
+leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(data = state_medians, ~lon, ~lat, color = "blue", 
+                   group = "Median Stations", popup = ~STATE) %>%
+  addCircleMarkers(data = closest_by_state, ~lon, ~lat, color = "red",
+                   group = "Cloest to Mean", popup = ~STATE) %>%
+  addLayersControl(overlayGroups = c("Median Stations", "Closest to Mean"))
+
+```
+
+# Question 4: Means of means
+
+```{r}
+state_temps <- aggregate(temp ~ STATE, data = met_stations, FUN = mean,
+                         na.rm = T)
+
+state_temps$temp_cat <- ifelse(state_temps$temp < 20, "low",
+                               ifelse(state_temps$temp < 25, "mid", "high"))
+
+met_with_temp_cat <- merge(met, stations, by.x = "USAFID", by.y = "USAF")
+
+met_with_temp_cat <- merge(met_with_temp_cat, state_temps[, c("STATE", "temp_cat")],
+                           by = "STATE")
+
+num_states <- aggregate(STATE ~ temp_cat, data = unique(met_with_temp_cat[, c("STATE", "temp_cat")]), 
+                        FUN = length)
+
+num_records <- aggregate(USAFID ~ temp_cat, data = met_with_temp_cat, FUN = length)
+
+num_stations <- aggregate(USAFID ~ temp_cat,
+                          data = unique(met_with_temp_cat[, c("USAFID", "temp_cat")]),
+                          FUN = length)
+
+mean_stats <- aggregate(cbind(temp, wind.sp, atm.press) ~ temp_cat,
+                        data = met_with_temp_cat, FUN = mean, na.rm = T)
+
+na_temp <- tapply(met_with_temp_cat$temp, met_with_temp_cat$temp_cat,
+                  function(x) sum(is.na(x)))
+na_wind <- tapply(met_with_temp_cat$wind.sp, met_with_temp_cat$temp_cat,
+                  function(x) sum(is.na(x)))
+na_atm <- tapply(met_with_temp_cat$atm.press, met_with_temp_cat$temp_cat,
+                  function(x) sum(is.na(x)))
+# Combine into final summary
+final_summary <- data.frame(
+  temp_cat = num_states$STATE,
+  num_states = num_states$STATE,
+  num_records = num_records$USAFID,
+  num_stations = num_stations$USAFID,
+  na_temp = as.numeric(na_temp[num_states$temp_cat]),
+  na_wind = as.numeric(na_wind[num_states$temp_cat]),
+  na_atm = as.numeric(na_atm[num_states$temp_cat]),
+  mean_temp = mean_stats$temp,
+  mean_wind_spd = mean_stats$wind.sp,
+  mean_atm_press = mean_stats$atm.press
+)
+
+
+print(final_summary)
+```
