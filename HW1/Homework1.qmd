@@ -1,0 +1,386 @@
+---
+title: "Homework 1"
+author: "Chih-Chan (Jessica) Lan"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+Primary Question: whether daily concentrations of PM 2.5 decreased in California over the 20 years spanning from 2002 to 2022.
+
+# Questoin 1
+
+(30 points) Given the formulated question from the assignment description, you will now conduct EDA Checklist items 1-5. First, download 2002 and 2022 data for all sites in California from the EPA Air Quality Data website, then read the data into R. For each of the two datasets, check the dimensions, headers, footers, variable names and variable types. Check the distribution of the key variable we are analyzing (PM 2.5). Write up a summary of all of your findings.
+
+## Download and read the data
+```{r}
+library(tidyverse)
+
+folder <- "/Users/cclan/Documents/2025.09 Fall/PM566/PM566labs/HW1"
+
+df_2002 <- read.csv(file.path(folder, "ad_viz_plotval_data_2002.csv"))
+df_2022 <- read.csv(file.path(folder, "ad_viz_plotval_data_2022.csv"))
+```
+
+## Check the 2002 PM2.5 data
+```{r}
+dim(df_2002)
+head(df_2002)
+tail(df_2002)
+summary(df_2002)
+hist(df_2002$Daily.Mean.PM2.5.Concentration)
+```
+## Check the 2022 PM2.5 data
+```{r}
+dim(df_2022)
+head(df_2022)
+tail(df_2022)
+summary(df_2022)
+hist(df_2022$Daily.Mean.PM2.5.Concentration)
+```
+```{r}
+library(ggplot2)
+library(patchwork)
+
+ymax <- max(
+  df_2002$Daily.Mean.PM2.5.Concentration,
+  df_2022$Daily.Mean.PM2.5.Concentration
+)
+
+p1 <- df_2002 %>%
+  ggplot(aes(x = 1, y = Daily.Mean.PM2.5.Concentration)) + 
+  geom_violin(fill = "red", alpha = 0.5) +
+  geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
+  labs(title = "PM2.5 Distribution in 2002", 
+       y = "Daily Mean PM2.5 Concentration", x = NULL) +
+  coord_cartesian(ylim = c(0, ymax)) +
+  theme_bw()
+
+p2 <- df_2022 %>%
+  ggplot(aes(x = 1, y = Daily.Mean.PM2.5.Concentration)) + 
+  geom_violin(fill = "blue", alpha = 0.5) +
+  geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
+  labs(title = "PM2.5 Distribution in 2022", 
+       y = "Daily Mean PM2.5 Concentration", x = NULL) +
+  coord_cartesian(ylim = c(0, ymax)) +
+  theme_bw()
+
+p1 + p2
+
+```
+
+**Summary: **
+The 2002 dataset contains 15,976 records and 22 variables, including 9 character variables and 13 numeric variables. Some values for Core-Based Statistical Areas (CBSA) are missing. The histogram of PM2.5 shows a strongly right-skewed distribution.
+
+The 2022 dataset contains 59,918 records and 22 variables. Similar to 2002, there are missing values in the CBSA code. Interestingly, the histogram of PM2.5 also shows a strongly right-skewed distribution, but it additionally includes negative PM2.5 values. Upon reviewing the data source, this may be due to instrumental factors. It is also worth noting that there are some outliers in the 2022 PM2.5 concentration data.
+
+Reference: https://pmc.ncbi.nlm.nih.gov/articles/PMC10497433/
+
+# Question 2
+(10 points) Combine the two years of data into one data frame. Use the Date variable to create a new column for year, which will serve as an identifier. Change the names of the key variables so that they are easier to refer to in your code.
+
+```{r}
+df_2002$Year <- substr(df_2002$Date, 7, 10)
+df_2022$Year <- substr(df_2022$Date, 7, 10)
+
+df <- bind_rows(df_2002, df_2022)
+df <- df %>%
+  rename(PM2.5 = Daily.Mean.PM2.5.Concentration,
+         Lon = Site.Longitude,
+         Lat = Site.Latitude)
+```
+
+I changed the name of Daily.Mean.PM2.5.Concentration to PM2.5, Site.Longitude to Lon, and Site.Latitude to Lat.
+
+# Question 3
+(20 points) Create a basic map (or maps) in leaflet showing the locations of the monitoring sites, using different colors for each year. Summarize the spatial distribution of the sites. Does this distribution change from 2002 to 2022?
+
+```{r}
+library(leaflet)
+library(htmltools)
+
+map_2002 <- df %>%
+  filter(Year == "2002") %>%
+  leaflet() %>%
+  addProviderTiles('OpenStreetMap') %>% 
+  addCircles(lat=~Lat,lng=~Lon, opacity=1, fillOpacity=1, radius=100, color="red") %>%
+  addControl("<b>Map of Monitoring Sites in 2002</b>", position = "topright")
+
+map_2022 <- df %>%
+  filter(Year == "2022") %>%
+  leaflet() %>%
+  addProviderTiles('OpenStreetMap') %>% 
+  addCircles(lat=~Lat,lng=~Lon, opacity=1, fillOpacity=1, radius=100, color="blue") %>%
+  addControl("<b>Map of Monitoring Sites in 2022</b>", position = "topright")
+
+leaflet_grid <- 
+  tagList(
+    tags$table(width = "100%",
+      tags$tr(
+        tags$td(map_2002),
+        tags$td(map_2022)
+      )
+    )
+  )
+
+leaflet_grid
+```
+
+```{r}
+pal <- colorFactor(palette = c("red", "blue"), domain = df$Year)
+
+leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(data = df %>% filter(Year == 2002),
+                   ~Lon, ~Lat, color = "red", group = "2002", popup = ~County,
+                   opacity = 0.5, fillOpacity = 0.5) %>%
+  addCircleMarkers(data = df %>% filter(Year == 2022),
+                   ~Lon, ~Lat, color = "blue", group = "2022", popup = ~County,
+                   opacity = 0.5, fillOpacity = 0.5) %>%
+  addLegend("bottomright", pal = pal, values = df$Year, title = "Year") %>%
+  addLayersControl(overlayGroups = c("2002", "2022"))
+  
+```
+```{r}
+df %>%
+  distinct(Year, Site.ID) %>%
+  count(Year, name = "n_sites")
+```
+
+
+**Summary: **
+From the maps of monitoring station distribution, it was difficult to make a clear comparison between the two years. To address this, I overlaid the maps of 2002 and 2022, which allowed for a more direct comparison. The results show that there are more sites in 2022, with most concentrated in the southern part of California. A comparison of the number of monitoring sites also confirms this observation.
+
+# Question 4
+
+(10 points) Check for any data issues such as missing or implausible values of PM
+ in the combined dataset. Calculate the proportion of missing/implausible values for each year and report any temporal patterns you see in these observations.
+
+```{r}
+df <- df %>%
+  mutate(PM_cat = case_when(
+    PM2.5 <=  50 ~ "Good",
+    PM2.5 <= 100 ~ "Moderate",
+    PM2.5 <= 150 ~ "Unhealthy for Sensitive Groups",
+    PM2.5 <= 200 ~ "Unhealthy",
+    PM2.5 <= 300 ~ "Very Unhealthy",
+    TRUE         ~ "Hazardous"
+  ))
+```
+
+```{r}
+pm_cat_pct <- df %>%
+  filter(!is.na(PM2.5)) %>%
+  count(Year, PM_cat) %>%
+  group_by(Year) %>%
+  mutate(pct = 100 * n / sum(n)) %>%
+  select(Year, PM_cat, n, pct)
+
+pm_cat_pct_wide <- pm_cat_pct %>%
+  mutate(pct = round(pct, 2)) %>%
+  select(Year, PM_cat, pct) %>%
+  pivot_wider(
+    names_from = Year,
+    values_from = pct,
+    values_fill = 0
+  )
+
+pm_cat_pct_wide
+
+```
+
+
+```{r}
+summary_stats <- df %>%
+  group_by(Year) %>%
+  summarise(
+    n_records   = n(),
+    n_missing   = sum(is.na(PM2.5)),
+    q1          = quantile(PM2.5, 0.25, na.rm = TRUE),
+    median      = quantile(PM2.5, 0.5,  na.rm = TRUE),
+    q3          = quantile(PM2.5, 0.75, na.rm = TRUE),
+    mean        = mean(PM2.5, na.rm = TRUE),
+    min         = min(PM2.5, na.rm = TRUE),
+    max         = max(PM2.5, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  rowwise() %>%
+  mutate(
+    iqr         = q3 - q1,
+    lower_bound = q1 - 1.5 * iqr,
+    upper_bound = q3 + 1.5 * iqr,
+    n_outliers  = sum(df$PM2.5[df$Year == Year] < lower_bound |
+                      df$PM2.5[df$Year == Year] > upper_bound, na.rm = TRUE),
+    pct_outlier = 100 * n_outliers / (n_records - n_missing)
+  ) %>%
+  ungroup()
+
+summary_stats
+
+```
+
+**Summary: **
+In the dataset, there were no missing values for PM2.5. For implausible values, I identified outliers using Tukey’s boxplot rule. The proportion of outliers was 6.8% in 2002 and 4.6% in 2022. It is also noteworthy that negative PM2.5 values appeared in 2022, which are likely due to instrument error or data recording issues.
+
+Regarding temporal patterns, both the mean and median PM2.5 values decreased from 2002 to 2022, indicating an overall improvement in air quality over the past two decades. However, when classifying PM2.5 concentrations according to the U.S. Air Quality Index, 2022 shows a higher proportion of days categorized as unhealthy. This suggests that while average conditions have improved, extreme pollution events leading to very high PM2.5 concentrations may have become more frequent.
+
+Reference: https://www.airnow.gov/aqi/aqi-basics/
+
+# Question 5
+(30 points) Explore the main question of interest at three different levels of spatial resolution. Create data visualizations (e.g. boxplots, histograms, line plots, violin plots) and summary statistics that best suit each level of the analysis. Be sure to write up explanations of what you observe at each level.
+
+## Level 1: State
+Examine the primary question for the entire state.
+```{r}
+library(ggplot2)
+library(patchwork)
+
+df$PM2.5[df$PM2.5 < 0] <- 0
+binwidth <- 4
+
+xmin <- floor(min(df$PM2.5))
+xmax <- ceiling(max(df$PM2.5))
+xmax <- 100
+
+mean_2002   <- mean(df$PM2.5[df$Year == "2002"], na.rm = TRUE)
+median_2002   <- median(df$PM2.5[df$Year == "2002"], na.rm = TRUE)
+mean_2022   <- mean(df$PM2.5[df$Year == "2022"], na.rm = TRUE)
+median_2022   <- median(df$PM2.5[df$Year == "2022"], na.rm = TRUE)
+
+p1 <- df %>%
+  filter(Year == "2002") %>%
+  ggplot(aes(x = PM2.5)) +
+  geom_histogram(aes(y = after_stat(count/sum(count) * 100)), binwidth = binwidth,
+                 fill = "red", alpha = 0.5, color = "red") +
+  coord_cartesian(ylim = c(0, ymax)) +
+  geom_vline(xintercept = mean_2002,   linetype = "dashed", color = "red") +
+  geom_vline(xintercept = median_2002, linetype = "solid",  color = "red") +
+  coord_cartesian(xlim = c(xmin, xmax)) +
+  labs(
+    title = "PM2.5 Histogram – 2002",
+    x = "Daily Mean PM2.5 Concentration (µg/m³)",
+    y = "Percentage (%)"
+  ) +
+  theme_bw()
+
+p2 <- df %>%
+  filter(Year == "2022") %>%
+  ggplot(aes(x = PM2.5)) +
+  geom_histogram(aes(y = after_stat(count/sum(count) * 100)), binwidth = binwidth,
+                 fill = "blue", alpha = 0.5, color = "blue") +
+  coord_cartesian(ylim = c(0, ymax)) +
+  geom_vline(xintercept = mean_2022,   linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = median_2022, linetype = "solid",  color = "blue") +
+  coord_cartesian(xlim = c(xmin, xmax)) +
+  labs(
+    title = "PM2.5 Histogram – 2022",
+    x = "Daily Mean PM2.5 Concentration (µg/m³)",
+    y = "Percentage (%)"
+  ) +
+  theme_bw()
+
+p1 / p2
+```
+**Summary: **
+I have already presented the violin plot in Question 1 and provided summary statistics at the state level in Question 4. In this question, I used histograms to compare the daily PM2.5 concentrations between 2002 and 2022. The solid line represents the mean value and dash line is median.
+
+Overall, at the state level, the mean daily PM2.5 concentration decreased in 2022 compared to 2002. When focusing on the distribution within the 0–100 µg/m³ range, the histograms further show that a larger proportion of days in 2022 fall into lower PM2.5 concentration levels, indicating an overall improvement in air quality.
+
+## Level 2: County
+Examine the primary question for every county in California.
+```{r}
+pm_county <- df %>%
+  group_by(Year, County) %>%
+  summarise(
+    mean   = mean(PM2.5, na.rm = TRUE),
+    median = median(PM2.5, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+pm_county_summary <- pm_county %>%
+  pivot_wider(
+    names_from  = Year,
+    values_from = c(mean, median),
+    names_glue  = "{Year}_{.value}") %>%
+  mutate(diff_mean = `2022_mean` - `2002_mean`,
+         diff_median = `2022_median` - `2002_median`)
+
+pm_county_summary
+```
+
+```{r}
+#| fig.width: 10
+#| fig.height: 20
+#| fig.align: center
+
+pd <- position_dodge2(width = 0.5, reverse = TRUE, preserve = "single")
+
+df %>%
+  ggplot(aes(x = County, y = PM2.5, 
+             color = factor(Year, levels = c("2002", "2022")), group = Year)) +
+  stat_summary(fun.data = mean_sdl, geom = "errorbar", position = pd,
+               width = 0.3, na.rm = TRUE) +
+  stat_summary(fun.data = mean_sdl, geom = "point", position = pd, size = 2,
+               na.rm = TRUE
+  ) +
+  labs(
+    title = "Median Daily PM2.5 Concentration by County (2002 vs 2022)",
+    x = "County", y = "PM2.5", color = "Year"
+  ) +
+  scale_color_manual(
+    values = c("2002" = "red", "2022" = "blue"),
+    breaks = c("2002", "2022")
+  ) +
+  theme_bw() +
+  coord_flip() +
+  theme(axis.text.y = element_text(size = 12))
+
+```
+
+
+**Summary: **
+From the summary dataset of PM2.5 by county, we can observe that both the mean and median PM2.5 levels decreased from 2002 to 2022, indicating an improvement in air quality. From the plot, however, a few counties show an increase in median PM2.5, including Trinity, Siskiyou, Nevada, Mono, Mendocino, and Del Norte. In addition, some counties only have data available for one of the two years. Overall, the findings suggest a general improvement in statewide air quality, while highlighting localized areas where PM2.5 levels have not improved or have even worsened.
+
+## Level 3: City
+Restrict the data to sites in Los Angeles county and examine the primary question for every site.
+```{r}
+pm_city <- df %>%
+  filter(County == "Los Angeles" & !is.na(Local.Site.Name) & Local.Site.Name != "") %>%
+  group_by(Year, Local.Site.Name) %>%
+  summarise(
+    mean   = mean(PM2.5, na.rm = TRUE),
+    median = median(PM2.5, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+pm_city_summary <- pm_city %>%
+  pivot_wider(
+    names_from  = Year,
+    values_from = c(mean, median),
+    names_glue  = "{Year}_{.value}") %>%
+  mutate(diff_mean = `2022_mean` - `2002_mean`,
+         diff_median = `2022_median` - `2002_median`)
+
+pm_city_summary
+```
+
+```{r}
+df %>%
+  filter(County == "Los Angeles" & !is.na(Local.Site.Name) & Local.Site.Name != "") %>%
+  group_by(Local.Site.Name, Year) %>%
+  summarise(median_pm25 = median(PM2.5, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = Local.Site.Name, y = median_pm25,
+             color = factor(Year), group = Local.Site.Name)) +
+  geom_point(position = position_dodge(width = 0.5), size = 3) +
+  geom_line(aes(group = Local.Site.Name), color = "grey60") +
+  labs(x = "Local Site Name", y = "Median PM2.5", color = "Year") +
+  scale_color_manual(
+    values = c("2002" = "red", "2022" = "blue")
+  ) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+**Summary: **
+From the summary dataset of PM2.5 by local sites in Los Angeles, we can see that some site names are missing, and many sites only have data for one of the two years. This suggests that local monitoring stations may have changed locations over time. For sites with data available in both years, both the mean and median PM2.5 values generally show a decrease, indicating improved air quality. This trend can also be observed in the plot of daily median values. However, due to the limited number of sites with complete data, the evidence may not be sufficient to fully support the conclusion that air quality consistently improved across Los Angeles between 2002 and 2022.
