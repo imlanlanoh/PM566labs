@@ -1,0 +1,147 @@
+---
+title: "PM566 Lab 6 - Text Mining"
+author: "Chih-Chan Jessica Lan"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidytext)
+library(readr)
+library(tidyr)
+```
+
+
+```{r}
+mt_samples <- read_csv("https://raw.githubusercontent.com/USCbiostats/data-science-data/master/00_mtsamples/mtsamples.csv")
+mt_samples <- mt_samples |>
+  select(description, medical_specialty, transcription)
+
+head(mt_samples)
+```
+# Question1
+```{r}
+mt_samples %>%
+  count(medical_specialty, sort = TRUE)
+
+ggplot(data = mt_samples) +
+  geom_bar(aes(x = medical_specialty)) +
+  coord_flip() +
+  theme_classic()
+```
+Answers: There are 40 specialties in the data. There's no overlapped between specialties. However, the distribution is not even. Some specialties, such as Surgery and Consultation/History, appear more frequently.
+
+# Question2
+```{r}
+mt_samples %>%
+  unnest_tokens(word, transcription) %>%
+  count(word, sord = T) %>%
+  top_n(20, n) %>%
+  ggplot(aes(x = reorder(word, n), y = n)) +
+  geom_col() +
+  theme_bw() +
+  coord_flip() +
+  labs(x = "Word", y = "Count", title = "Top 20 Most Frequent Words ()")
+```
+
+Answer:
+From the top 20 words, we can see that most of them are common but non-meaningfull words, such as "the", "and", "was" etc. This makes sense because these are the most most frequently used words in English, often referred to as stop words. From a text analysis perspective, these words do no provide useful information on the content. Among the top words graph, only "patient" gives a hint that the data is related to medical records. Overall, we can observe that the most frequently used words do not provide much meaningful information.
+
+
+# Question3
+```{r}
+stop_words_update <- stop_words[!stop_words$word %in% c("right", "left"), ]
+
+mt_samples %>%
+  unnest_tokens(word, transcription) %>%
+  anti_join(stop_words_update, by = "word") %>%
+  filter(!grepl("^[0-9]+$", word)) %>%
+  count(word, sort = T) %>%
+  top_n(20, n) %>%
+  ggplot(aes(x = reorder(word, n), y = n)) +
+  geom_col() +
+  theme_bw() +
+  coord_flip() +
+  labs(x = "Word", y = "Count", title = "Top 20 Words (removed stop words)")
+```
+
+Answer: Since I consider “right” and “left” meaningful in the context of medical records, I kept them instead of removing them as stop words. After removing common stop words, the top frequently used words are now much more related to the medical field. Words such as “patient,” “history,” “procedure,” “pain,” and “left/right” reflect clinical documentation and indicate that the text likely describes patient history, body orientation, and medical procedures. Overall, this provides a clearer idea of the dataset’s medical nature.
+
+# Question4
+```{r}
+mt_samples %>%
+  unnest_tokens(bigram, transcription, token = "ngrams", n = 2) %>%
+  count(bigram, sort = T) %>%
+  top_n(20, n)
+
+#Tri-grams
+mt_samples %>%
+  unnest_tokens(trigram, transcription, token = "ngrams", n = 3) %>%
+  count(trigram, sort = T) %>%
+  top_n(20, n)
+```
+
+Answer: From the bi-gram results, we can see the most frequent two-word combinations, such as “the patient” and “of the.” However, many of these are still common grammatical phrases and do not provide much meaningful insight into the medical content. When looking at the tri-grams, some phrases become more specific and informative. For example, “the operating room” and “prepped and draped” clearly suggest surgical procedures, while “patient is a” and “there is no” reflect typical clinical documentation patterns. Overall, tri-grams begin to reveal more contextual and domain-related information compared to bi-grams.
+
+# Question5
+```{r}
+mt_samples %>%
+  unnest_tokens(bigram, transcription, token = "ngrams", n = 2) %>%
+  separate(bigram, c("word1", "word2"), sep = " ") %>%
+  filter(word1 == "pain" | word2 == "pain") %>%
+  count(word1, word2, sort = T)
+```
+
+
+# Question6
+```{r}
+mt_samples %>%
+  unnest_tokens(word, transcription) %>%
+  anti_join(stop_words_update, by = "word") %>%
+  filter(!grepl("^[0-9]+$", word)) %>%
+  group_by(medical_specialty) %>%
+  count(word, sort = T) %>%
+  top_n(5, n) %>%
+  arrange(medical_specialty, desc(n))
+
+
+```
+
+# Question7
+```{r, fig.width=10, fig.height=8}
+plt1 <- mt_samples %>%
+  unnest_tokens(bigram, transcription, token = "ngrams", n = 2) %>%
+  separate(bigram, c("word1", "word2"), sep = " ") %>%
+  filter(!grepl("^[0-9]+$", word1) & !grepl("^[0-9]+$", word2)) %>%
+  filter(word2 == "pain") %>%
+  group_by(medical_specialty) %>%
+  count(word1, word2, sort = T) %>%
+  top_n(5, n) %>%
+  filter(n >= 10) %>%
+  arrange(medical_specialty, desc(n)) %>%
+  ungroup()
+
+plt1 %>%
+  ggplot(aes(x = reorder_within(word1, n, medical_specialty), y = n, fill = medical_specialty)) +
+  geom_col(show.legend = FALSE) +
+  scale_x_reordered() +
+  facet_wrap(~ medical_specialty, scales = "free_y", ncol = 4, labeller = labeller(medical_specialty = label_wrap_gen(width = 18))) +
+  coord_flip() +
+  labs(
+    x = "Word before 'pain'",
+    y = "Count",
+    title = "Most Frequent Words Before 'Pain' by Medical Specialty"
+  ) +
+  theme_bw() +
+  theme(
+    strip.text = element_text(size = 8),
+    axis.text.y = element_text(size = 7),
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+This plot explores the most frequent words appearing before “pain” across different medical specialties. (Records with fewer than 10 counts were removed for clarity.) From the visualization, we can see that “chest pain” is the most commonly described condition, especially in Consult/History and Cardiovascular/Pulmonary specialties, which aligns with their clinical focus on heart and respiratory issues. In contrast, “neck pain” appears mainly in Surgery, Orthopedic, and Neurology-related specialties, reflecting their emphasis on nerve-related problems. Overall, the chart highlights how different types of pain are emphasized across specialties, suggesting that certain pain locations are more prevalent or clinically relevant in specific medical domains.
