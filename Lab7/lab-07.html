@@ -3223,7 +3223,10 @@ University of Pennsylvania Perelman School
 <div class="cell">
 <div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>titles <span class="ot">&lt;-</span> <span class="fu">sapply</span>(abstracts, <span class="cf">function</span>(x){</span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">unlist</span>(<span class="fu">strsplit</span>(x, <span class="at">split =</span> <span class="st">&quot;</span><span class="sc">\n\n</span><span class="st">&quot;</span>))[<span class="dv">2</span>]</span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>}, <span class="at">USE.NAMES =</span> <span class="cn">FALSE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>}, <span class="at">USE.NAMES =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>titles <span class="ot">&lt;-</span> <span class="fu">str_replace_all</span>(titles, <span class="st">&quot;</span><span class="sc">\\</span><span class="st">n+&quot;</span>, <span class="st">&quot; &quot;</span>)</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>titles <span class="ot">&lt;-</span> <span class="fu">str_squish</span>(titles)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>authors <span class="ot">&lt;-</span> <span class="fu">sapply</span>(abstracts, <span class="cf">function</span>(x){</span>
@@ -3236,29 +3239,26 @@ University of Pennsylvania Perelman School
 <span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>}, <span class="at">USE.NAMES =</span> <span class="cn">FALSE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>affiliations <span class="ot">&lt;-</span> <span class="fu">str_extract</span>(abstracts, <span class="st">&quot;(?&lt;=Author information:</span><span class="sc">\n</span><span class="st">)([</span><span class="sc">\\</span><span class="st">s</span><span class="sc">\\</span><span class="st">S])*?(?=</span><span class="sc">\n\n</span><span class="st">)&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(stringr)</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>affiliations <span class="ot">&lt;-</span> <span class="fu">str_extract</span>(</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>  abstracts,</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;(?&lt;=Author information:</span><span class="sc">\n</span><span class="st">)</span><span class="sc">\\</span><span class="st">s*([</span><span class="sc">\\</span><span class="st">s</span><span class="sc">\\</span><span class="st">S]*?)(?=</span><span class="sc">\\</span><span class="st">n</span><span class="sc">\\</span><span class="st">n|$)&quot;</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>affiliations <span class="ot">&lt;-</span> <span class="fu">str_replace_all</span>(affiliations, <span class="st">&quot;</span><span class="sc">\\</span><span class="st">n+&quot;</span>, <span class="st">&quot; &quot;</span>)</span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>affiliations <span class="ot">&lt;-</span> <span class="fu">str_squish</span>(affiliations)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(stringr)</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>affiliations <span class="ot">&lt;-</span> <span class="fu">str_extract</span>(</span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>  abstracts,</span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;(?&lt;=Author information:</span><span class="sc">\n</span><span class="st">)</span><span class="sc">\\</span><span class="st">s*([</span><span class="sc">\\</span><span class="st">s</span><span class="sc">\\</span><span class="st">S]*?)(?=</span><span class="sc">\\</span><span class="st">n</span><span class="sc">\\</span><span class="st">n|$)&quot;</span></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>affiliations <span class="ot">&lt;-</span> <span class="fu">str_replace_all</span>(affiliations, <span class="st">&quot;</span><span class="sc">\\</span><span class="st">n+&quot;</span>, <span class="st">&quot; &quot;</span>)</span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>affiliations <span class="ot">&lt;-</span> <span class="fu">str_squish</span>(affiliations)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</div>
-<div class="cell">
-<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>papers <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">journal =</span> journal,</span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">title =</span> titles,</span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">authors =</span> authors,</span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">affiliations =</span> affiliations,</span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">stringsAsFactors =</span> <span class="cn">FALSE</span></span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>knitr<span class="sc">::</span><span class="fu">kable</span>(papers[<span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>, ])</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>papers <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">journal =</span> journal,</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">title =</span> titles,</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">authors =</span> authors,</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">affiliations =</span> affiliations,</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">stringsAsFactors =</span> <span class="cn">FALSE</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>knitr<span class="sc">::</span><span class="fu">kable</span>(papers[<span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>, ])</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <table class="caption-top table table-sm table-striped small">
 <colgroup>
@@ -3284,27 +3284,15 @@ University of Pennsylvania Perelman School
 </tr>
 <tr class="even">
 <td style="text-align: left;">Science</td>
-<td style="text-align: left;">mRNA vaccines induce durable immune memory to SARS-CoV-2 and variants of</td>
-<td style="text-align: left;"></td>
-<td style="text-align: left;"></td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">concern.</td>
+<td style="text-align: left;">mRNA vaccines induce durable immune memory to SARS-CoV-2 and variants of concern.</td>
 <td style="text-align: left;">Goel RR(#)(1)(2), Painter MM(#)(1)(2), Apostolidis SA(#)(1)(2)(3), Mathew D(#)(1)(2), Meng W(1)(4), Rosenfeld AM(1)(4), Lundgreen KA(5), Reynaldi A(6), Khoury DS(6), Pattekar A(2), Gouma S(5), Kuri-Cervantes L(1)(5), Hicks P(5), Dysinger S(5), Hicks A(2), Sharma H(2), Herring S(2), Korte S(2), Baxter AE(1), Oldridge DA(1)(4), Giles JR(1)(7)(8), Weirick ME(5), McAllister CM(5), Awofolaju M(5), Tanenbaum N(5), Drapeau EM(5), Dougherty J(1), Long S(1), D’Andrea K(1), Hamilton JT(2)(5), McLaughlin M(1), Williams JC(2), Adamski S(2), Kuthuru O(1); UPenn COVID Processing Unit‡; Frank I(9), Betts MR(1)(5), Vella LA(10), Grifoni A(11), Weiskopf D(11), Sette A(11)(12), Hensley SE(5), Davenport MP(6), Bates P(5), Luning Prak ET(1)(4), Greenplate AR(1)(2), Wherry EJ(1)(2)(7)(8).</td>
 <td style="text-align: left;">(1)Institute for Immunology, University of Pennsylvania Perelman School of Medicine, Philadelphia, PA, USA. (2)Immune Health, University of Pennsylvania Perelman School of Medicine, Philadelphia, PA, USA. (3)Division of Rheumatology, University of Pennsylvania Perelman School of Medicine, Philadelphia, PA, USA. (4)Department of Pathology and Laboratory Medicine, University of Pennsylvania Perelman School of Medicine, Philadelphia, PA, USA. (5)Department of Microbiology, University of Pennsylvania Perelman School of Medicine, Philadelphia, PA, USA. (6)Kirby Institute, University of New South Wales, Sydney, NSW, Australia. (7)Department of Systems Pharmacology and Translational Therapeutics, University of Pennsylvania Perelman School of Medicine, Philadelphia, PA, USA. (8)Parker Institute for Cancer Immunotherapy, University of Pennsylvania Perelman School of Medicine, Philadelphia, PA, USA. (9)Division of Infectious Disease, University of Pennsylvania Perelman School of Medicine, Philadelphia, PA, USA. (10)Division of Infectious Disease, Department of Pediatrics, Children’s Hospital of Philadelphia, Philadelphia, PA, USA. (11)Center for Infectious Disease and Vaccine Research, La Jolla Institute for Immunology (LJI), La Jolla, CA, USA. (12)Department of Medicine, Division of Infectious Diseases and Global Public Health, University of California San Diego (UCSD), La Jolla, CA, USA. (#)Contributed equally</td>
-<td style="text-align: left;"></td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">Occup Environ Med</td>
-<td style="text-align: left;">SARS-CoV-2 antibody seroprevalence among firefighters in Orange County,</td>
-<td style="text-align: left;"></td>
-<td style="text-align: left;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">California.</td>
+<td style="text-align: left;">Occup Environ Med</td>
+<td style="text-align: left;">SARS-CoV-2 antibody seroprevalence among firefighters in Orange County, California.</td>
 <td style="text-align: left;">Vieira V(1)(2), Tang IW(3), Bartell S(3)(2), Zahn M(4), Fedoruk MJ(3)(2).</td>
 <td style="text-align: left;">(1)Department of Environmental and Occupational Health, University of California Irvine Susan and Henry Samueli College of Health Sciences, Irvine, California, USA vvieira@uci.edu. (2)University of California Irvine Center for Occupational and Environmental Health, Irvine, California, USA. (3)Department of Environmental and Occupational Health, University of California Irvine Susan and Henry Samueli College of Health Sciences, Irvine, California, USA. (4)Orange County Health Care Agency, Santa Ana, California, USA.</td>
-<td style="text-align: left;"></td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">Science</td>
@@ -3314,15 +3302,9 @@ University of Pennsylvania Perelman School
 </tr>
 <tr class="odd">
 <td style="text-align: left;">Sci Rep</td>
-<td style="text-align: left;">Estimated seroprevalence of SARS-CoV-2 antibodies among adults in Orange County,</td>
-<td style="text-align: left;"></td>
-<td style="text-align: left;"></td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">California.</td>
+<td style="text-align: left;">Estimated seroprevalence of SARS-CoV-2 antibodies among adults in Orange County, California.</td>
 <td style="text-align: left;">Bruckner TA(1), Parker DM(2), Bartell SM(2)(3), Vieira VM(2), Khan S(4), Noymer A(2), Drum E(2), Albala B(5), Zahn M(6), Boden-Albala B(7).</td>
 <td style="text-align: left;">(1)Program in Public Health, University of California, Irvine, 653 E. Peltason Dr, Irvine, CA, 92697, USA. tim.bruckner@uci.edu. (2)Program in Public Health, University of California, Irvine, 653 E. Peltason Dr, Irvine, CA, 92697, USA. (3)Department of Statistics, University of California, Irvine, Bren Hall 2019, Irvine, CA, 92697-1250, USA. (4)School of Medicine, University of California, Irvine, 1001 Health Sciences Rd, Irvine, CA, 92697, USA. (5)Center for Clinical Research, School of Medicine, University of California, Irvine, 1001 Health Sciences Rd, Irvine, CA, 92617, USA. (6)Orange County Health Care Agency, 405 W. 5th St., Santa Ana, CA, 92701, USA. (7)Program in Public Health, University of California, Irvine, 653 E. Peltason Dr, Irvine, CA, 92697, USA. BBODENAL@hs.uci.edu.</td>
-<td style="text-align: left;"></td>
 </tr>
 </tbody>
 </table>
