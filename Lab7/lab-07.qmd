@@ -1,0 +1,138 @@
+---
+title: "PM566 Lab 7 - Web Scraping and Regular Expressions"
+author: "Chih-Chan Jessica Lan"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+# Load Library
+```{r}
+library(rvest)
+library(httr)
+library(xml2)
+library(stringr)
+```
+
+# Question 1: How many Sars-Cov-2 papers?
+ref: slide 32-26
+```{r}
+# Downloading the website
+website <- xml2::read_html("https://pubmed.ncbi.nlm.nih.gov/?term=sars-cov-2")
+
+# Finding the counts: use copy FULL XPath
+counts <- xml2::xml_find_first(website, '/html/body/main/div[9]/div[2]/div[2]/div[1]/div[1]/h3/span')
+
+# Turning it into text
+counts <- as.character(counts)
+
+# Extracting the data using regex
+totalcount <- stringr::str_extract(counts, "[0-9,.]+")
+
+# Removing any commas/dots so that we can convert to numeric
+totalcount <- gsub('[,.]', '', totalcount)
+
+totalcount <- as.numeric(totalcount)
+print(totalcount)
+```
+
+# Question 2: Get article abstracts and authors
+```{r}
+# read in text, each line is a separate character
+abstracts <- readLines('~/Downloads/abstract-sars-cov-2-set.txt', warn = FALSE)
+
+# combine all text into one character
+abstracts <- paste(abstracts, collapse = '\n')
+
+# split the text whenever 3 new lines occur in a row (indicating two blank lines)
+abstracts <- unlist(strsplit(abstracts, split = '\n\n\n'))
+
+# replace any remaining "\n" symbols with spaces
+abstracts <- gsub("\n", " ", abstracts)
+
+# replace multiple spaces with single space
+abstracts <- gsub(" +", " ", abstracts)
+```
+
+# Question 3: Question 3: Distribution of universities
+```{r}
+library(stringr)
+
+pattern <- paste(
+  "[A-Z][a-z]+(?:\\s+[A-Z][a-z]+)*\\s+University",
+  "University\\s+of\\s+[A-Z][a-z]+(?:\\s+[A-Z][a-z]+)*",
+  "[A-Z][a-z]+(?:\\s+[A-Z][a-z]+)*\\s+Institute\\s+of\\s+[A-Z][a-z]+",
+  sep = "|"
+)
+
+institution <- str_extract_all(abstracts, pattern)
+institution <- unlist(institution)
+sort(table(institution), decreasing =  T)[1:10]
+```
+
+Discussion:
+The most common 10 institutes are shown above. However, the top entry, “University of California,” is misleading because it represents multiple campuses rather than a single entity. This happens because some university names in the abstracts include punctuation marks, such as commas in “University of California, Irvine” or “University of California, San Diego.” As a result, the current regular expression only captures the first part of the name. \n
+
+To improve the results, the pattern should be updated to allow optional commas and additional words after “University of,” so that campus names like “University of California, Irvine” are captured in full. It should also include cases such as “X University of Y” (e.g., “Medical University of South Carolina”) and “X Institute of Y” (e.g., “Israel Institute of Technology”). Finally, incomplete fragments like “The University” should be excluded. With these adjustments, the extracted institutions would better represent distinct campuses or organizations rather than broader systems.
+
+# Question 4: Make a tidy dataset
+```{r}
+# read in text, each line is a separate character
+abstracts <- readLines('~/Downloads/abstract-sars-cov-2-set.txt', warn = FALSE)
+# combine all text into one character
+abstracts <- paste(abstracts, collapse = '\n')
+# split the text whenever 3 new lines occur in a row (indicating two blank lines)
+abstracts <- unlist(strsplit(abstracts, split = '\n\n\n'))
+```
+
+```{r}
+journal <- str_match(abstracts, "^[0-9]+\\.\\s*([^.]+)\\.")[, 2]
+```
+
+```{r}
+titles <- sapply(abstracts, function(x){
+  unlist(strsplit(x, split = "\n\n"))[2]
+}, USE.NAMES = FALSE)
+
+titles <- str_replace_all(titles, "\\n+", " ")
+titles <- str_squish(titles)
+```
+
+
+```{r}
+authors <- sapply(abstracts, function(x){
+  author_text <- unlist(strsplit(x, split = "\n\n"))[3]
+  
+  author_text <- str_replace_all(author_text, "\\n+", " ")
+  author_text <- str_squish(author_text)
+  
+  return(author_text)
+}, USE.NAMES = FALSE)
+```
+
+
+```{r}
+library(stringr)
+
+affiliations <- str_extract(
+  abstracts,
+  "(?<=Author information:\n)\\s*([\\s\\S]*?)(?=\\n\\n|$)"
+)
+
+affiliations <- str_replace_all(affiliations, "\\n+", " ")
+affiliations <- str_squish(affiliations)
+```
+
+```{r}
+papers <- data.frame(
+  journal = journal,
+  title = titles,
+  authors = authors,
+  affiliations = affiliations,
+  stringsAsFactors = FALSE
+)
+
+knitr::kable(papers[1:5, ])
+
+```

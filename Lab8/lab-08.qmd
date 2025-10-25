@@ -1,0 +1,178 @@
+---
+title: "PM566 Lab 8 - Efficiency and Parallelization"
+author: "Chih-Chan Jessica Lan"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+# Loading Library
+```{r}
+library(parallel)
+library(microbenchmark)
+```
+
+# Problem 1: Vectorization
+```{r}
+fun1 <- function(n = 100, k = 4, lambda = 4) {
+  x <- NULL
+  
+  for (i in 1:n){
+    x <- rbind(x, rpois(k, lambda))    
+  }
+  
+  return(x)
+}
+```
+
+```{r}
+fun1alt <- function(n = 100, k = 4, lambda = 4) {
+  x <- replicate(k, rpois(n, lambda))
+  return(x)
+}
+```
+
+```{r}
+fun1alt2 <- function(n = 100, k = 4, lambda = 4) {
+  x <- sapply(1:k, function(i) rpois(n, lambda))
+  return(x)
+}
+```
+
+```{r}
+fun1altTA <- function(n = 100, k = 4, lambda = 4) {
+  matrix(rpois(n*k, lambda), nrow = n, ncol = k)
+}
+```
+
+
+```{r}
+set.seed(123)
+result_fun1 <- fun1()
+set.seed(123)
+result_fun1alt <- fun1alt()
+set.seed(123)
+result_fun1alt2 <- fun1alt2()
+set.seed(123)
+result_fun1altTA <- fun1altTA()
+```
+
+
+```{r}
+# Dimension
+c(dim(result_fun1), dim(result_fun1alt), dim(result_fun1alt2), dim(result_fun1altTA))
+# Mean
+c(mean(result_fun1), mean(result_fun1alt), mean(result_fun1alt2), mean(result_fun1altTA))
+# SD
+c(sd(result_fun1), sd(result_fun1alt), sd(result_fun1alt2), sd(result_fun1altTA))
+```
+
+```{r}
+# Benchmarking
+microbenchmark::microbenchmark(
+  fun1(),
+  fun1alt(),
+  fun1alt2(),
+  fun1altTA()
+)
+```
+
+# Problem 2
+```{r}
+# Data Generating Process (10 x 10,000 matrix)
+set.seed(1234)
+x <- matrix(rnorm(1e4), nrow=10)
+
+# Find each column's max value
+fun2 <- function(x) {
+  apply(x, 2, max)
+}
+
+fun2alt <- function(x) {
+  ncols <- ncol(x)
+  result <- numeric(ncols)
+  for (i in 1:ncols) {
+    result[i] <- max(x[, i])
+  }
+  return(result)
+}
+
+fun2altTA <- function(x) {
+  x[cbind(max.col(t(x)), 1:ncol(x))]
+}
+```
+
+```{r}
+identical(fun2(x), fun2alt(x), fun2altTA(x))
+```
+
+```{r}
+# Benchmarking
+microbenchmark::microbenchmark(
+  fun2(x),
+  fun2alt(x),
+  fun2altTA(x)
+)
+```
+
+# Problem 3: Parallelization
+```{r}
+my_boot <- function(dat, stat, R, ncpus = 1L) {
+  
+  # Getting the random indices
+  n <- nrow(dat)
+  idx <- matrix(sample.int(n, n*R, TRUE), nrow=n, ncol=R)
+  
+  # THIS FUNCTION NEEDS TO BE PARALELLIZED
+  # EDIT THIS CODE:
+  if (ncpus > 1) {
+    cl <- makeCluster(ncpus)
+    clusterSetRNGStream(cl, 1)
+    clusterExport(cl, varlist = c("dat", "stat", "idx"), envir = environment())
+    
+    ans <- lapply(seq_len(R), function(i) {
+      stat(dat[idx[,i], , drop=FALSE])
+        })
+
+    stopCluster(cl)
+  } else {
+    ans <- lapply(seq_len(R), function(i) {
+      stat(dat[idx[,i], , drop=FALSE])
+      })
+    
+    }
+  ans <- do.call(rbind, ans)
+  return(ans)
+}
+```
+
+```{r}
+# Bootstrap of an OLS
+my_stat <- function(d) coef(lm(y ~ x, data=d))
+
+# DATA SIM
+set.seed(1)
+n <- 500; R <- 1e4
+
+x <- cbind(rnorm(n)); y <- x*5 + rnorm(n)
+
+# Checking if we get something similar as lm
+ans0 <- confint(lm(y~x))
+ans1 <- my_boot(dat = data.frame(x, y), my_stat, R = R, ncpus = 2L)
+
+# You should get something like this
+t(apply(ans1, 2, quantile, c(.025,.975)))
+##                   2.5%      97.5%
+## (Intercept) -0.1372435 0.05074397
+## x            4.8680977 5.04539763
+ans0
+##                  2.5 %     97.5 %
+## (Intercept) -0.1379033 0.04797344
+## x            4.8650100 5.04883353
+```
+```{r}
+system.time(my_boot(dat = data.frame(x, y), my_stat, R = 4000, ncpus = 1L))
+system.time(my_boot(dat = data.frame(x, y), my_stat, R = 4000, ncpus = 2L))
+```
+
