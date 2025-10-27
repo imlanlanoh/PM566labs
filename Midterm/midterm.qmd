@@ -1,0 +1,934 @@
+---
+title: "Midterm Project <br> Exploring Factors Influencing Annual Medical Costs"
+author: "Chih-Chan Jessica Lan"
+format: 
+  html:
+    code-fold: true
+    embed-resources: true
+editor: visual
+---
+
+# Introduction
+
+Healthcare expenditures in the United States continue to rise; however, the quality of care has not improved at the same pace. The imbalance between spending and outcomes raises important questions about how healthcare resources are distributed and used. Therefore, it is essential to understand the factors that contribute to higher medical spending and identify key drivers of healthcare costs. \n
+
+This analysis uses a synthetic medical cost dataset that simulates individual-level healthcare and insurance information, including demographic, socioeconomic, lifestyle, clinical, healthcare utilization, and insurance-related variables. The dataset provides an opportunity to explore potential patterns and associations that may explain variations in annual medical expenditures across different population groups. \n
+
+The main research question guiding this analysis is:
+**“What socioeconomic, lifestyle, and clinical factors are associated with higher annual medical expenditures?”** \n
+
+To address this question, exploratory data analysis (EDA) and visualizations were applied to examine variable distributions and their relationships with annual medical costs. The goal is to identify factors associated with healthcare spending.
+
+# Data Preparation
+
+The **Medical Insurance Cost dataset** is compiled from multiple sources and published on the Kaggle platform in September 2025. It was derived from publicly available health surveys, insurance research studies, and anonymized healthcare data, and was initially created to support model development for predicting medical expenses. The dataset contains 100,000 individual records and 54 variables across six dimensions: demographic characteristics, socioeconomic status, health conditions, lifestyle factors, insurance plans, and medical expenditures. \n
+
+## Download Dataset and Read-in Library
+
+```{r, message=FALSE, results='hide'}
+library(RKaggle)
+med_cost <- RKaggle::get_dataset("mohankrishnathalla/medical-insurance-cost-prediction")
+
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(patchwork)
+library(knitr)
+library(kableExtra)
+library(tibble)
+library(scales)
+library(ggcorrplot)
+```
+
+## Data Description
+
+For this analysis, a subset of relevant variables was selected to focus on factors influencing annual healthcare costs. These variables are summarized in **Table 1** below. \n
+
+```{r, message=FALSE, results='hide'}
+dim(med_cost)
+summary(med_cost)
+```
+
+```{r}
+variable_table <- tribble(
+  ~"Category", ~"Variables",
+  
+  "Demographics & Socioeconomic",
+  "Age, Sex, Geographic Region, Urban/Rural Residence, Annual Income, Education Level, Marital Status, Employment Status, Household Size",
+  
+  "Lifestyle & Habits",
+  "Body Mass Index (BMI), Smoking Status, Alcohol Consumption Frequency",
+  
+  "Health & Clinical",
+  "Hypertension, Diabetes, Chronic Obstructive Pulmonary Disease (COPD), Cardiovascular Disease, Cancer History, Kidney Disease, Liver Disease, Arthritis, Mental Health Condition, Number of Chronic Conditions, Systolic Blood Pressure, Diastolic Blood Pressure, LDL Cholesterol, HbA1c Level, Composite Health Risk Score, High-Risk Indicator",
+  
+  "Healthcare Utilization & Procedures",
+  "Number of Outpatient Visits in the Past Year, Hospitalizations in the Past 3 Years, Total Days Hospitalized in the Past 3 Years",
+  
+  "Insurance-related Variables",
+  "Health Plan Type, Annual Deductible, Copayment Amount, Provider Quality Rating, Annual Premium, Monthly Premium",
+  
+  "Outcome Variables",
+  "Annual Medical Cost"
+)
+
+kable(
+  variable_table,
+  format = "html",
+  caption = "<b>Table 1. Variables Related to Analysis<b>",
+  col.names = c("Category", "Variables"),
+  align = c("l", "l")
+) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    bootstrap_options = c("striped", "hover", "condensed"),
+    font_size = 13
+  ) %>%
+  column_spec(1, width = "12em") %>%
+  column_spec(2, width = "35em") 
+```
+
+## Data Wrangling
+
+The outcome variable for this analysis is **annual medical cost**. Because the distribution of medical costs was highly right-skewed, a log transformation was applied to better approximate a normal distribution and to produce more robust statistical results. This transformation reduces the influence of extremely high-cost outliers and allows for easier interpretation of relative differences in medical spending.
+
+All character-type variables were converted to factors to facilitate frequency and categorical analyses. Binary health condition indicators (e.g., hypertension, diabetes, arthritis) were also recoded into “Yes” or “No” categories for clearer presentation. In addition, key clinical indicators were grouped based on standard medical criteria. According to the American Medical Association (AMA) blood pressure classification, individuals were categorized into four groups:
+
+-   Normal: systolic \< 120 mmHg and diastolic \< 80 mmHg\
+-   Elevated: systolic 120–129 mmHg and diastolic \< 80 mmHg\
+-   Stage 1 Hypertension: systolic 130–139 mmHg or diastolic 80–89 mmHg\
+-   Stage 2 Hypertension: systolic ≥ 140 mmHg or diastolic ≥ 90 mmHg
+
+Similarly, HbA1c levels were categorized into:
+
+-   Normal (\< 5.7%)\
+-   Prediabetes (5.7%–6.4%)\
+-   Diabetes (≥ 6.5%)
+
+```{r}
+med_cost <- med_cost %>%
+  select(
+    # Unique ID:
+    person_id,
+    
+    # Demographics & Socioeconomic
+    age, sex, region, urban_rural, income, education,
+    marital_status, employment_status, household_size,
+    
+    # Lifestyle & Habits
+    bmi, smoker, alcohol_freq,
+    
+    # Health & Clinical
+    hypertension, diabetes, copd, cardiovascular_disease, cancer_history,
+    kidney_disease, liver_disease, arthritis, mental_health,
+    chronic_count, systolic_bp, diastolic_bp, ldl, hba1c,
+    risk_score, is_high_risk,
+    
+    # Healthcare Utilization & Procedures
+    visits_last_year, hospitalizations_last_3yrs, days_hospitalized_last_3yrs,
+    
+    # Insurance-related Variables
+    plan_type, deductible, copay, provider_quality, annual_premium, monthly_premium,
+    
+    # Outcome
+    annual_medical_cost
+  ) %>%
+  mutate(
+    across(c(sex, region, urban_rural, education, marital_status,
+             employment_status, plan_type, smoker, alcohol_freq),
+           as.factor),
+
+    alcohol_freq = fct_relevel(alcohol_freq, "None", "Occasional", "Weekly", "Daily"),
+    smoker       = fct_relevel(smoker,       "Never", "Former", "Current"),
+    education    = fct_relevel(education,    "No HS", "HS", "Some College",
+                                               "Bachelors", "Masters", "Doctorate"),
+    across(c(hypertension, diabetes, copd, cardiovascular_disease, cancer_history,
+      kidney_disease, liver_disease, arthritis, mental_health, is_high_risk),
+      ~ factor(ifelse(. == 1, "Yes", "No"), levels = c("No", "Yes"))),
+    
+    bp_cat = case_when(
+      systolic_bp < 120 & diastolic_bp < 80 ~ "Normal",
+      systolic_bp >= 120 & systolic_bp < 130 & diastolic_bp < 80 ~ "Elevated",
+      (systolic_bp >= 130 & systolic_bp < 140) | (diastolic_bp >= 80 & diastolic_bp < 90) ~ "Stage 1 Hypertension",
+      systolic_bp >= 140 | diastolic_bp >= 90 ~ "Stage 2 Hypertension",
+      TRUE ~ NA_character_
+    ),
+    bp_cat = factor(bp_cat, levels = c("Normal", "Elevated", "Stage 1 Hypertension", "Stage 2 Hypertension")),
+    
+    hba1c_group = case_when(
+      hba1c < 5.7 ~ "Normal",
+      hba1c >= 5.7 & hba1c < 6.5 ~ "Prediabetes",
+      hba1c >= 6.5 ~ "Diabetes",
+      TRUE ~ NA_character_
+    ),
+    hba1c_group = factor(hba1c_group, levels = c("Normal", "Prediabetes", "Diabetes")),
+      
+    log_cost     = log(annual_medical_cost)
+    )
+```
+
+# Exploratory Analysis
+
+## Outcome Variable Distribution: Annual Medical Cost
+
+Figure 1 compares the original and log-transformed distributions of annual medical cost. The log transformation (natural logarithm) reduces the right skewness and produces a more symmetric distribution, allowing for more reliable interpretation and comparision in further analysis.
+
+```{r}
+p1 <- ggplot(med_cost, aes(x = annual_medical_cost)) +
+  geom_histogram(bins = 50, fill = "steelblue4", color = "white") +
+  labs(title = "Original scale", x = "Annual Medical Cost", y = "Count") +
+  theme_classic()
+
+p2 <- ggplot(med_cost, aes(x = log_cost)) +
+  geom_histogram(bins = 50, fill = "skyblue2", color = "white") +
+  labs(title = "Log-transformed", x = "Annual Medical Cost (Natural Log)", y = "Count") +
+  theme_classic()
+
+(p1 + p2) +
+  plot_annotation(title = "Figure 1. Distribution of Annual Medical Cost (Original vs Log Scale)",
+                  theme = theme(plot.title = element_text(face = "bold", size = 14))
+                  )
+```
+
+## Socioeconomic Chracteristics
+
+Figure 2 illustrates the socioeconomic distribution of the study population. The age distribution is approximately bell-shaped, with most individuals between 30 and 60 years old, suggesting that most people are in working-age. As for geographic region, individuals from the South and North regions are slightly overrepresented compared to other areas. Most people live in urban areas, indicating that the dataset may be more urban-centered than the general U.S. population. \n
+
+The income distribution is highly right-skewed, with most individuals earning less than \$100,000 annually. Regarding employment status, over half of the respondents are employed, while the proportions of retired and self-employed individuals are smaller. For education, most individuals have completed at least some college, with bachelor’s and master’s degrees being the most common, suggesting a relatively well-educated sample. \n
+
+Overall, the dataset appears to represent a younger, more urban, and higher-educated population, which may not fully reflect the general U.S. demographic population.
+
+```{r fig.height=8}
+p1 <- med_cost %>%
+  ggplot(aes(x = age)) +
+  geom_histogram(bins = 30, fill = "#5DADE2", color = "white") +
+  labs(title = "Age", x = "", y = "Count") +
+  theme_classic()
+
+p2 <- med_cost %>%
+  ggplot(aes(x = region)) +
+  geom_bar(fill = "#48C9B0", color = "white") +
+  labs(title = "Region", x = "", y = "Count") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p3 <- med_cost %>%
+  ggplot(aes(x = urban_rural)) +
+  geom_bar(fill = "#F5B041", color = "white") +
+  labs(title = "Residence", x = "", y = "Count") +
+  theme_classic()
+
+p4 <- med_cost %>%
+  ggplot(aes(x = income)) +
+  geom_histogram(bins = 30, fill = "#AF7AC5", color = "white") +
+  labs(title = "Annual Income", x = "", y = "Count") +
+  theme_classic()
+
+p5 <- med_cost %>%
+  ggplot(aes(x = employment_status)) +
+  geom_bar(fill = "#58D68D", color = "white") +
+  labs(title = "Employment Status", x = "", y = "Count") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p6 <- med_cost %>%
+  ggplot(aes(x = education)) +
+  geom_bar(fill = "#EC7063", color = "white") +
+  labs(title = "Education Level", x = "", y = "Count") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+(p1 | p2 | p3) /
+(p4 | p5 | p6) +
+  plot_annotation(
+    title = "Figure 2. Socioeconomic Distribution",
+    theme = theme(plot.title = element_text(face = "bold", size = 14))
+  )
+```
+
+## Lifestyle Factors
+
+Figure 3 illustrates lifestyle and habit patterns in the study population. BMI follows a near-normal distribution, suggesting a balanced spread around the average weight range. Most individuals reported occasional alcohol consumption, and the majority were non-smokers, indicating relatively low engagement in high-risk lifestyle behaviors.
+
+```{r}
+p1 <- med_cost %>%
+  ggplot(aes(x = bmi)) +
+  geom_histogram(bins = 30, fill = "#5DADE2", color = "white") +
+  labs(title = "BMI", x = "", y = "Count") +
+  theme_classic()
+
+p2 <- med_cost %>%
+  ggplot(aes(x = alcohol_freq)) +
+  geom_bar(fill = "#F5B041", color = "white") +
+  labs(title = "Alcohol Frequency", x = "", y = "Count") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p3 <- med_cost %>%
+  ggplot(aes(x = smoker)) +
+  geom_bar(fill = "#EC7063", color = "white") +
+  labs(title = "Smoking Status", x = "", y = "Count") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+(p1 | p2 | p3) +
+  plot_annotation(
+    title = "Figure 3. Lifestyle & Habits Distribution",
+    theme = theme(plot.title = element_text(face = "bold", size = 14))
+  )
+```
+
+## Clinical Factors
+
+Figure 4 displays the distribution of clinical factors, including the number of chronic conditions and HbA1c levels. Most individuals reported having no or only one chronic condition. The HbA1c distribution shows that the majority of individuals had normal blood glucose levels, with smaller proportions categorized as prediabetic or diabetic. These patterns suggest that the dataset primarily represents a population with low disease burden and limited metabolic risk.
+
+```{r fig.height=8}
+p1 <- med_cost %>%
+  ggplot(aes(x = chronic_count)) +
+  geom_bar(fill = "#58D68D", color = "white") +
+  labs(title = "Number of Chronic Conditions",
+       x = "Chronic Condition Count",
+       y = "Count") +
+  theme_classic()
+
+p2 <- med_cost %>%
+  ggplot(aes(x = hba1c)) +
+  geom_histogram(bins = 30, fill = "#5DADE2", color = "white", alpha = 0.85) +
+  geom_vline(xintercept = c(5.7, 6.5),
+             color = c("#E74C3C", "#C0392B"),
+             linetype = "dashed",
+             linewidth = 1) +
+  labs(title = "Distribution of HbA1c Level",
+       x = "HbA1c (%)",
+       y = "Count") +
+  theme_classic(base_size = 12) +
+  annotate("text", x = 5.7, y = 20000, label = "Prediabetes",
+           color = "#E74C3C", angle = 90, vjust = -0.4, size = 3.4) +
+  annotate("text", x = 6.5, y = 20000, label = "Diabetes",
+           color = "#C0392B", angle = 90, vjust = -0.4, size = 3.4)
+
+p3 <- med_cost %>%
+  ggplot(aes(x = hba1c_group)) +
+  geom_bar(fill = "#EC7063", color = "white") +
+  labs(title = "HbA1c Category",
+       x = "Category",
+       y = "Count") +
+  theme_classic()
+
+((p1 | p3) / p2) +
+  plot_layout(heights = c(1, 1.4)) +
+  plot_annotation(
+    title = "Figure 4. Clinical Factors Distribution",
+    theme = theme(plot.title = element_text(face = "bold", size = 14))
+  )
+
+
+```
+
+## Healthcare Utilization
+
+As shown in Figure 5, the number of hospitalized days is highly right-skewed, indicating that most individuals had few or no hospital stays. According to the Healthcare Cost and Utilization Project (HCUP) report, the average hospital length of stay in the U.S. was about 4.6 days in 2016, suggesting that this dataset represents a generally healthier population. \n
+
+Similarly, the number of outpatient visits appears lower than the national average of 2.4 visits per person per year among Americans. These differences imply that the dataset’s population may not be fully representative of the overall U.S. population in terms of healthcare utilization patterns.
+
+```{r}
+p1 <- med_cost %>%
+  ggplot(aes(x = visits_last_year)) +
+  geom_histogram(bins = 25, fill = "#5DADE2", color = "white") +
+  labs(title = "Outpatient Visits \n(Past Year)", x = "Visits", y = "Count") +
+  theme_classic()
+
+p2 <- med_cost %>%
+  ggplot(aes(x = hospitalizations_last_3yrs)) +
+  geom_bar(fill = "#48C9B0", color = "white") +
+  labs(title = "Hospitalizations \n(Past 3 Years)", x = "Counts of Hospitalization", y = "Count") +
+  theme_classic()
+
+p3 <- med_cost %>%
+  ggplot(aes(x = days_hospitalized_last_3yrs)) +
+  geom_histogram(bins = 20, fill = "#F5B041", color = "white") +
+  labs(title = "Days Hospitalized \n(Past 3 Years)", x = "Days", y = "Count") +
+  theme_classic()
+
+(p1 / (p2 | p3)) +
+  plot_annotation(
+    title = "Figure 5. Healthcare Utilization Distribution",
+    theme = theme(plot.title = element_text(face = "bold", size = 14))
+  )
+```
+
+## Insurance Related Variables
+
+Figure 6 summarizes the distribution of insurance-related characteristics. Both annual and monthly premiums are highly right-skewed, indicating that most individuals pay relatively low premiums while a small subset pays substantially higher amounts. Copayment and deductible amounts are more evenly distributed across fixed categories, with most individuals having lower out-of-pocket expenses. Provider quality ratings generally cluster between 3 and 4, suggesting that most participants are insured under plans associated with moderate to high provider quality.
+
+```{r fig.height=12}
+p1 <- med_cost %>%
+  ggplot(aes(x = annual_premium)) +
+  geom_histogram(bins = 30, fill = "#5DADE2", color = "white", alpha = 0.8) +
+  labs(title = "Annual Premium", x = "Annual Premium ($)", y = "Count") +
+  theme_classic()
+
+p2 <- med_cost %>%
+  ggplot(aes(x = monthly_premium)) +
+  geom_histogram(bins = 30, fill = "#48C9B0", color = "white", alpha = 0.8) +
+  labs(title = "Monthly Premium", x = "Monthly Premium ($)", y = "Count") +
+  theme_classic()
+
+p3 <- med_cost %>%
+  ggplot(aes(x = factor(copay))) +
+  geom_bar(fill = "#F5B041", color = "white", alpha = 0.9) +
+  labs(title = "Copayment Amount", x = "Copay ($)", y = "Count") +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+p4 <- med_cost %>%
+  ggplot(aes(x = factor(deductible))) +
+  geom_bar(fill = "#EC7063", color = "white", alpha = 0.9) +
+  labs(title = "Annual Deductible", x = "Deductible ($)", y = "Count") +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+p5 <- med_cost %>%
+  ggplot(aes(x = provider_quality)) +
+  geom_histogram(bins = 20, fill = "#AF7AC5", color = "white", alpha = 0.8) +
+  labs(title = "Provider Quality Rating", x = "Quality Score", y = "Count") +
+  theme_classic()
+
+((p1 | p2) / (p3 | p4) / (p5)) +
+  plot_layout(heights = c(1.1, 1, 1.6)) +
+  plot_annotation(
+    title = "Figure 6. Insurance-Related Variables",
+    theme = theme(plot.title = element_text(face = "bold", size = 14))
+  )
+```
+
+## Summary Statistics
+```{r}
+var_labels <- tribble(
+  ~Variable,               ~Label,                                  ~Category,
+
+  # --- Demographics & Socioeconomic ---
+  "age",                   "Age",                                   "Demographics & Socioeconomic",
+  "sex",                   "Sex",                                   "Demographics & Socioeconomic",
+  "region",                "Geographic Region",                     "Demographics & Socioeconomic",
+  "urban_rural",           "Urban/Rural Residence",                 "Demographics & Socioeconomic",
+  "income",                "Annual Income",                         "Demographics & Socioeconomic",
+  "education",             "Education Level",                       "Demographics & Socioeconomic",
+  "marital_status",        "Marital Status",                        "Demographics & Socioeconomic",
+  "employment_status",     "Employment Status",                     "Demographics & Socioeconomic",
+  "household_size",        "Household Size",                        "Demographics & Socioeconomic",
+
+  # --- Lifestyle & Habits ---
+  "bmi",                   "Body Mass Index (BMI)",                 "Lifestyle & Habits",
+  "smoker",                "Smoking Status",                        "Lifestyle & Habits",
+  "alcohol_freq",          "Alcohol Consumption Frequency",         "Lifestyle & Habits",
+
+  # --- Health & Clinical ---
+  "hypertension",          "Hypertension",                          "Health & Clinical",
+  "diabetes",              "Diabetes",                              "Health & Clinical",
+  "copd",                  "Chronic Obstructive Pulmonary Disease (COPD)", "Health & Clinical",
+  "cardiovascular_disease","Cardiovascular Disease",                "Health & Clinical",
+  "cancer_history",        "Cancer History",                        "Health & Clinical",
+  "kidney_disease",        "Kidney Disease",                        "Health & Clinical",
+  "liver_disease",         "Liver Disease",                         "Health & Clinical",
+  "arthritis",             "Arthritis",                             "Health & Clinical",
+  "mental_health",         "Mental Health Condition",               "Health & Clinical",
+  "chronic_count",         "Number of Chronic Conditions",          "Health & Clinical",
+  "systolic_bp",           "Systolic Blood Pressure",               "Health & Clinical",
+  "diastolic_bp",          "Diastolic Blood Pressure",              "Health & Clinical",
+  "ldl",                   "LDL Cholesterol",                       "Health & Clinical",
+  "hba1c",                 "HbA1c Level",                           "Health & Clinical",
+  "risk_score",            "Composite Health Risk Score",           "Health & Clinical",
+  "is_high_risk",          "High-Risk Indicator",                   "Health & Clinical",
+
+  # --- Healthcare Utilization & Procedures ---
+  "visits_last_year",          "Outpatient Visits (Past Year)",     "Healthcare Utilization & Procedures",
+  "hospitalizations_last_3yrs","Hospitalizations (Past 3 Years)",   "Healthcare Utilization & Procedures",
+  "days_hospitalized_last_3yrs","Days Hospitalized (Past 3 Years)", "Healthcare Utilization & Procedures",
+
+  # --- Insurance-related Variables ---
+  "plan_type",             "Health Plan Type",                      "Insurance-related Variables",
+  "deductible",            "Annual Deductible",                     "Insurance-related Variables",
+  "copay",                 "Copayment Amount",                      "Insurance-related Variables",
+  "provider_quality",      "Provider Quality Rating",               "Insurance-related Variables",
+  "annual_premium",        "Annual Premium",                        "Insurance-related Variables",
+  "monthly_premium",       "Monthly Premium",                       "Insurance-related Variables",
+
+  # --- Outcome Variables ---
+  "annual_medical_cost",   "Annual Medical Cost",                   "Outcome Variables",
+  "log_cost",              "Log(Annual Medical Cost)",              "Outcome Variables"
+)
+
+```
+
+```{r}
+numeric_summary <- med_cost %>%
+  select(where(is.numeric), -person_id, -log_cost) %>%
+  summarise(across(
+    everything(),
+    list(
+      n = ~sum(!is.na(.)),
+      mean = ~mean(., na.rm = TRUE),
+      sd = ~sd(., na.rm = TRUE),
+      min = ~min(., na.rm = TRUE),
+      median = ~median(., na.rm = TRUE),
+      max = ~max(., na.rm = TRUE)
+    ),
+    .names = "{.col}_{.fn}"
+  )) %>%
+  pivot_longer(
+    everything(),
+    names_to = c("Variable", ".value"),
+    names_pattern = "^(.*)_(n|mean|sd|min|median|max)$"
+  ) %>%
+  mutate(n = format(n, big.mark = ",", scientific = FALSE)) %>%
+  left_join(var_labels, by = "Variable") %>%
+  mutate(
+    Variable = coalesce(Label, Variable),
+    Category = coalesce(Category, "Other")
+  ) %>%
+  select(Category, Variable, n, mean, sd, min, median, max) %>%
+  mutate(n = format(n, big.mark = ",", scientific = FALSE)) %>%
+  arrange(factor(Category, levels = unique(var_labels$Category)))
+
+numeric_summary %>%
+  kbl(
+    format = "html",
+    digits = 2,
+    caption = "<b>Table 2. Summary Statistics for Numeric Variables</b>",
+    escape = FALSE,
+    col.names = c("Category", "Variable", "n", "Mean", "SD", "Min", "Median", "Max")
+  ) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    bootstrap_options = c("striped", "hover", "condensed"),
+    font_size = 13
+  ) %>%
+  collapse_rows(columns = 1, valign = "top")
+```
+
+```{r}
+category_summary <- med_cost %>%
+  select(where(~ is.factor(.) || is.character(.))) %>%
+  pivot_longer(everything(), names_to = "Variable", values_to = "Level") %>%
+  mutate(
+    Level = fct_na_value_to_level(as.factor(Level), level = "Missing")
+  ) %>%
+  count(Variable, Level, name = "n") %>%
+  group_by(Variable) %>%
+  mutate(Percent = 100 * n / sum(n)) %>%
+  ungroup() %>%
+
+  left_join(var_labels, by = "Variable") %>%
+  mutate(
+    Variable = coalesce(Label, Variable),
+    Category = coalesce(Category, "Other")
+  ) %>%
+  select(Category, Variable, Level, n, Percent) %>%
+  arrange(
+    factor(Category, levels = unique(var_labels$Category)),
+    Variable,
+    as.integer(Level)
+  ) %>%
+  mutate(
+    n = format(n, big.mark = ",", scientific = FALSE),
+    Percent = sprintf("%.1f%%", Percent)
+  )
+
+category_summary %>%
+  kbl(
+    format = "html",
+    caption = "<b>Table 3. Distribution of Categorical Variables</b>",
+    escape = FALSE,
+    col.names = c("Group", "Variable", "Level", "Count", "Percent")
+  ) %>%
+  kable_styling(full_width = FALSE, position = "center",
+                bootstrap_options = c("striped", "hover", "condensed"),
+                font_size = 13) %>%
+  collapse_rows(columns = 1:2, valign = "top")
+```
+
+# Preliminary Results
+
+In this section, I explored the relationship between various factors and annual medical costs to address the main research question: **Which socioeconomic, lifestyle, and clinical factors are associated with higher annual medical expenditures?**
+
+For continuous variables, scatter plots were used to visualize potential linear relationships with log-transformed medical costs, reducing the influence of outliers and right-skewness. For categorical variables, violin plots and box plots were applied to illustrate the distribution of annual medical costs across different groups.
+
+## Socioeconomic Factors
+
+Figure 7 presents the relationship between socioeconomic factors and annual medical costs. Among the variables examined, age shows a modest positive association with higher medical costs, suggesting that healthcare spending tends to increase with age. In contrast, other socioeconomic factors, such as region, education, residence type, and employment status, display relatively similar cost distributions across categories, indicating limited influence on medical expenditures in this dataset.
+
+```{r message=FALSE, warning=FALSE, fig.height=14}
+p1 <- med_cost %>%
+  ggplot(aes(x = age, y = log_cost)) +
+  geom_point(alpha = 0.3, color = "#5DADE2", size = 1.2) +
+  geom_smooth(method = "lm", se = TRUE, color = "#C0392B", linewidth = 1) +
+  labs(title = "Age vs Log(Cost)", x = "Age (years)", y = "Log(Annual Medical Cost)") +
+  theme_classic(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+p2 <- med_cost %>%
+  ggplot(aes(x = log(income), y = log_cost)) +
+  geom_point(alpha = 0.3, color = "#5DADE2", size = 1.2) +
+  geom_smooth(method = "lm", se = TRUE, color = "#C0392B", linewidth = 1) +
+  labs(title = "Income vs Log(Cost)", x = "Log(Annual Income)", y = "Log(Annual Medical Cost)") +
+  theme_classic(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+violin_theme <- theme_classic(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+p3 <- med_cost %>%
+  ggplot(aes(x = region, y = log_cost)) +
+  geom_violin(fill = "#48C9B0", color = "grey30", alpha = 0.8, trim = FALSE) +
+  geom_boxplot(width = 0.08, outlier.alpha = 0.2) +
+  labs(title = "Region", x = "Region", y = "Log(Annual Medical Cost)") +
+  violin_theme
+
+p4 <- med_cost %>%
+  ggplot(aes(x = education, y = log_cost)) +
+  geom_violin(fill = "#EC7063", color = "grey30", alpha = 0.8, trim = FALSE) +
+  geom_boxplot(width = 0.08, outlier.alpha = 0.2) +
+  labs(title = "Education", x = "Education Level", y = "Log(Annual Medical Cost)") +
+  violin_theme
+
+p5 <- med_cost %>%
+  ggplot(aes(x = urban_rural, y = log_cost)) +
+  geom_violin(fill = "#F5B041", color = "grey30", alpha = 0.85, trim = FALSE) +
+  geom_boxplot(width = 0.08, outlier.alpha = 0.2) +
+  labs(title = "Residence Type", x = "Urban/Rural", y = "Log(Annual Medical Cost)") +
+  violin_theme
+
+p6 <- med_cost %>%
+  ggplot(aes(x = employment_status, y = log_cost)) +
+  geom_violin(fill = "#58D68D", color = "grey30", alpha = 0.85, trim = FALSE) +
+  geom_boxplot(width = 0.08, outlier.alpha = 0.2) +
+  labs(title = "Employment Status", x = "Status", y = "Log(Annual Medical Cost)") +
+  violin_theme
+
+((p1 | p2) / (p3 | p4) / (p5 | p6)) +
+  plot_annotation(
+    title = "Figure 7. Socioeconomic Factors with Annual Medical Cost",
+    theme = theme(plot.title = element_text(face = "bold", size = 14))
+  )
+```
+
+## Lifestyle Factors
+
+Regarding lifestyle factors, from Figure 8, BMI demonstrated a slight positive relationship with medical costs, indicating that individuals with higher BMI may incur greater health expenditures. This aligns with the assumption that people with higher BMI are in poorer health condition due to overweight. \n
+Smoking status and alcohol consumption frequency did not show strong differences between groups, possibly reflecting a relatively healthy population or limited variation in behavior patterns.
+```{r message=FALSE, warning=FALSE, fig.height=8}
+p1 <- med_cost %>%
+  ggplot(aes(x = bmi, y = log_cost)) +
+  geom_point(alpha = 0.3, color = "#5DADE2", size = 1.2) +
+  geom_smooth(method = "lm", se = TRUE, color = "#C0392B", linewidth = 1) +
+  labs(
+    title = "BMI vs Log(Cost)",
+    x = "BMI",
+    y = "Log(Annual Medical Cost)"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+p2 <- med_cost %>%
+  ggplot(aes(x = smoker, y = log_cost)) +
+  geom_violin(fill = "#F5B041", color = "grey30", alpha = 0.85, trim = FALSE) +
+  geom_boxplot(width = 0.08, outlier.alpha = 0.2) +
+  labs(
+    title = "Smoking Status",
+    x = "Smoking Status",
+    y = "Log(Annual Medical Cost)"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+p3 <- med_cost %>%
+  ggplot(aes(x = alcohol_freq, y = log_cost)) +
+  geom_violin(fill = "#EC7063", color = "grey30", alpha = 0.85, trim = FALSE) +
+  geom_boxplot(width = 0.08, outlier.alpha = 0.2) +
+  labs(
+    title = "Alcohol Consumption Frequency",
+    x = "Alcohol Frequency",
+    y = "Log(Annual Medical Cost)"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+(p1 / (p2 | p3)) +
+  plot_layout(heights = c(1.2, 1)) +
+  plot_annotation(
+    title = "Figure 8. Lifestyle Factors Associated with Annual Medical Cost",
+    theme = theme(plot.title = element_text(face = "bold", size = 14))
+  )
+
+```
+
+## Clinical Factors
+
+In Figure 9, it shows that individuals with more chronic conditions, elevated blood pressure, or higher HbA1c levels generally had higher annual medical costs. These findings are consistent with the expectation that multiple chronic conditions and poorer metabolic control contribute to greater healthcare utilization. Risk score also correlated positively with medical spending, supporting its role as an overall health burden indicator.
+```{r message=FALSE, warning=FALSE, fig.width=12, fig.height=14}
+p1 <- med_cost %>%
+  ggplot(aes(x = chronic_count, y = log_cost)) +
+  geom_point(alpha = 0.3, color = "#5DADE2", size = 1.2) +
+  geom_smooth(method = "lm", se = TRUE, color = "#C0392B", linewidth = 1) +
+  labs(title = "Chronic Condition Count",
+       x = "Number of Chronic Conditions",
+       y = "Log(Annual Medical Cost)") +
+  theme_classic(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+p2 <- med_cost %>%
+  ggplot(aes(x = factor(chronic_count), y = log_cost)) +
+  geom_boxplot(fill = "#48C9B0", color = "grey30", alpha = 0.9) +
+  labs(title = "Medical Cost by Chronic Condition Count",
+       x = "Chronic Condition Count",
+       y = "Log(Annual Medical Cost)") +
+  theme_classic(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+p3 <- med_cost %>%
+  ggplot(aes(x = systolic_bp, y = log_cost)) +
+  geom_point(alpha = 0.3, color = "#5DADE2", size = 1.2) +
+  geom_smooth(method = "lm", se = TRUE, color = "#C0392B", linewidth = 1) +
+  labs(title = "Systolic BP",
+       x = "Systolic Blood Pressure (mmHg)",
+       y = "Log(Annual Medical Cost)") +
+  theme_classic(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+p4 <- med_cost %>%
+  ggplot(aes(x = diastolic_bp, y = log_cost)) +
+  geom_point(alpha = 0.3, color = "#5DADE2", size = 1.2) +
+  geom_smooth(method = "lm", se = TRUE, color = "#C0392B", linewidth = 1) +
+  labs(title = "Diastolic BP",
+       x = "Diastolic Blood Pressure (mmHg)",
+       y = "Log(Annual Medical Cost)") +
+  theme_classic(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+p5 <- ggplot(med_cost, aes(x = bp_cat, y = log_cost)) +
+  geom_violin(fill = "#F5B041", alpha = 0.85, color = "grey30", trim = FALSE) +
+  geom_boxplot(width = 0.08, outlier.alpha = 0.2) +
+  labs(title = "Medical Cost by Blood Pressure Category",
+       x = "Blood Pressure Category",
+       y = "Log(Annual Medical Cost)") +
+  theme_classic(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5),
+        axis.text.x = element_text(angle = 30, hjust = 1))
+
+p6 <- med_cost %>%
+  ggplot(aes(x = hba1c, y = log_cost)) +
+  geom_point(alpha = 0.3, color = "#5DADE2", size = 1.2) +
+  geom_smooth(method = "lm", se = TRUE, color = "#C0392B", linewidth = 1) +
+  labs(title = "HbA1c",
+       x = "HbA1c (%)",
+       y = "Log(Annual Medical Cost)") +
+  theme_classic(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+p7 <- ggplot(med_cost, aes(x = hba1c_group, y = log_cost)) +
+  geom_violin(fill = "#EC7063", alpha = 0.85, color = "grey30", trim = FALSE) +
+  geom_boxplot(width = 0.08, outlier.alpha = 0.2) +
+  labs(title = "Medical Cost by HbA1c Category",
+       x = "HbA1c Category",
+       y = "Log(Annual Medical Cost)") +
+  theme_classic(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+p8 <- med_cost %>%
+  ggplot(aes(x = risk_score, y = log_cost)) +
+  geom_point(alpha = 0.3, color = "#5DADE2", size = 1.2) +
+  geom_smooth(method = "lm", se = TRUE, color = "#C0392B", linewidth = 1) +
+  labs(title = "Health Risk Score",
+       x = "Composite Health Risk Score",
+       y = "Log(Annual Medical Cost)") +
+  theme_classic(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+((p1 | p2) /
+ (p6 | p7) /
+ (p3 | p4) /
+ (p5 | p8)) +
+  plot_layout(heights = c(1, 1, 1, 1.1)) +
+  plot_annotation(
+    title = "Figure 9. Clinical Factors Associated with Annual Medical Cost",
+    theme = theme(plot.title = element_text(face = "bold", size = 14))
+  )
+
+```
+
+## Healthcare Utilization
+
+Figure 10 illustrates the relationship between healthcare utilization and annual medical costs. Individuals with a higher number of outpatient visits and more days spent hospitalized tended to have greater annual medical expenditures. Similarly, those who experienced more hospitalizations in the past three years also incurred higher costs. These findings are intuitive, as greater utilization of healthcare services generally corresponds to increased medical spending due to higher frequency of treatments, procedures, and care episodes.
+
+```{r message=FALSE, warning=FALSE, fig.height=8}
+p1 <- med_cost %>%
+  ggplot(aes(x = visits_last_year, y = log_cost)) +
+  geom_point(alpha = 0.3, color = "#5DADE2", size = 1.2) +
+  geom_smooth(method = "lm", se = TRUE, color = "#C0392B", linewidth = 1) +
+  labs(title = "Outpatient Visits (Past Year)",
+       x = "Number of Visits",
+       y = "Log(Annual Medical Cost)") +
+  theme_classic(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+p2 <- ggplot(med_cost, aes(x = factor(hospitalizations_last_3yrs), y = log_cost)) +
+  geom_violin(fill = "#48C9B0", alpha = 0.85, color = "grey30", trim = FALSE) +
+  geom_boxplot(width = 0.1, outlier.alpha = 0.2) +
+  labs(title = "Hospitalizations (Past 3 Years)",
+       x = "Hospitalizations",
+       y = "Log(Annual Medical Cost)") +
+  theme_classic(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+p3 <- med_cost %>%
+  ggplot(aes(x = days_hospitalized_last_3yrs, y = log_cost)) +
+  geom_point(alpha = 0.3, color = "#5DADE2", size = 1.2) +
+  geom_smooth(method = "lm", se = TRUE, color = "#C0392B", linewidth = 1) +
+  labs(title = "Days Hospitalized (Past 3 Years)",
+       x = "Total Days",
+       y = "Log(Annual Medical Cost)") +
+  theme_classic(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+(p1 / (p2 | p3)) +
+  plot_layout(heights = c(1.2, 1)) +
+  plot_annotation(
+    title = "Figure 10. Healthcare Utilization and Annual Medical Cost",
+    theme = theme(plot.title = element_text(face = "bold", size = 14))
+  )
+```
+
+## Insurance Related Variables
+
+In the insurance-related variables, annual and monthly premiums were found to be highly correlated; therefore, only annual premiums were included in further analysis. Figure 11 shows that individuals who pay higher premiums also tend to have higher annual medical costs, suggesting that those with greater expected healthcare utilization may select—or be assigned to—plans with higher premiums. In contrast, copay and deductible amounts demonstrated weaker relationships with medical costs, likely reflecting differences in plan structure rather than individual health needs.
+
+```{r message=FALSE, warning=FALSE, fig.width=12, fig.height=8}
+p1 <- ggplot(med_cost, aes(x = monthly_premium, y = annual_premium)) +
+  geom_point(alpha = 0.3, color = "#5DADE2", size = 1.2) +
+  geom_smooth(method = "lm", se = TRUE, color = "#C0392B") +
+  labs(
+    title = "Monthly vs Annual Premium",
+    x = "Monthly Premium ($)",
+    y = "Annual Premium ($)"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+p2 <- ggplot(med_cost, aes(x = plan_type, y = log_cost)) +
+  geom_violin(fill = "#48C9B0", alpha = 0.85, color = "grey30", trim = FALSE) +
+  geom_boxplot(width = 0.08, outlier.alpha = 0.2) +
+  labs(
+    title = "Medical Cost by Plan Type",
+    x = "Insurance Plan Type",
+    y = "Log(Annual Medical Cost)"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+p3 <- ggplot(med_cost, aes(x = factor(deductible), y = log_cost)) +
+  geom_violin(fill = "#F5B041", alpha = 0.8, trim = FALSE) +
+  geom_boxplot(width = 0.1, outlier.alpha = 0.2) +
+  labs(
+    title = "Medical Cost by Deductible Amount",
+    x = "Deductible ($)",
+    y = "Log(Annual Medical Cost)"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+p4 <- ggplot(med_cost, aes(x = factor(copay), y = log_cost)) +
+  geom_violin(fill = "#EC7063", alpha = 0.85, trim = FALSE) +
+  geom_boxplot(width = 0.1, outlier.alpha = 0.2) +
+  labs(
+    title = "Medical Cost by Copay Amount",
+    x = "Copay ($)",
+    y = "Log(Annual Medical Cost)"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+p5 <- ggplot(med_cost, aes(x = log(annual_premium), y = log_cost)) +
+  geom_point(alpha = 0.3, color = "#5DADE2", size = 1.2) +
+  geom_smooth(method = "loess", se = FALSE, color = "#C0392B", linewidth = 1) +
+  labs(
+    title = "Annual Premium vs Medical Cost",
+    x = "Log(Annual Premium)",
+    y = "Log(Annual Medical Cost)"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+((p1 | p5) /
+ (p3 | p4) /
+ p2) +
+  plot_layout(heights = c(1.1, 1, 1.3)) +
+  plot_annotation(
+    title = "Figure 11. Insurance-Related Factors and Annual Medical Cost",
+    theme = theme(plot.title = element_text(face = "bold", size = 14))
+  )
+```
+
+## Correlation Matrix
+
+Figure 12 presents the correlation matrix of numeric variables. The results show that annual and monthly premiums are the most highly correlated with overall health expenditures, followed by the number of chronic conditions and the composite health risk score. These findings reinforce earlier observations that individuals with greater health needs or higher risk profiles tend to incur higher medical costs, which may also be reflected in higher insurance premiums.
+
+```{r fig.width=16, fig.height=12}
+num_vars <- med_cost %>%
+  select(where(is.numeric)) %>%
+  select(-person_id, -annual_medical_cost)
+
+cor_matrix <- cor(num_vars, use = "pairwise.complete.obs")
+
+name_map <- setNames(var_labels$Label, var_labels$Variable)
+rownames(cor_matrix) <- name_map[rownames(cor_matrix)]
+colnames(cor_matrix) <- name_map[colnames(cor_matrix)]
+
+ggcorrplot(
+  cor_matrix,
+  method = "square",
+  type = "lower",
+  lab = TRUE,
+  lab_size = 4.5,
+  colors = c("#6D9EC1", "white", "#E46726"),
+  title = "Figure 12. Correlation Matrix of Numeric Variables",
+  ggtheme = theme_minimal()
+) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    axis.text.y = element_text(size = 12),
+    plot.title = element_text(face = "bold", size = 18),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  )
+
+```
+
+# Conclusion
+
+This analysis explored the key variables and population characteristics in the Medical Cost dataset, revealing that the synthesized population appears to represent a relatively younger, well-educated, and healthier group. The normally distributed BMI and limited use of healthcare services suggest that this dataset may not fully capture the cost patterns of high-utilization populations.
+
+Subsequent analyses identified several factors associated with higher annual medical expenditures, including age, BMI, number of chronic conditions, composite health risk score, insurance premiums, and hospitalization history. These findings highlight the financial burden of chronic disease management and the role of health risk in higher medical costs.
+
+However, this dataset has limitations in representativeness and transparency. As an open-source, synthetic dataset, it lacks details on sampling methods and data collection timelines, making it difficult to infer causality or generalize results to the broader U.S. population. Future work should include demographic validation and statistical modeling to examine potential confounding and interaction effects.
+
+Overall, this exploratory analysis identifies key determinants of high medical expenditures and provides a foundation for developing predictive models that can inform healthcare cost management and policy decision-making.
