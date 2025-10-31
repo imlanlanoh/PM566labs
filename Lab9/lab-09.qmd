@@ -1,0 +1,161 @@
+---
+title: "PM566 Lab 9 - SQL"
+author: "Chih-Chan Jessica Lan"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+# Setup
+```{r}
+# install.packages(c("RSQLite", "DBI"))
+
+library(RSQLite)
+library(DBI)
+
+# Initialize a temporary in memory database
+con <- dbConnect(SQLite(), ":memory:")
+
+# Download tables
+actor <- read.csv("https://raw.githubusercontent.com/ivanceras/sakila/master/csv-sakila-db/actor.csv")
+rental <- read.csv("https://raw.githubusercontent.com/ivanceras/sakila/master/csv-sakila-db/rental.csv")
+customer <- read.csv("https://raw.githubusercontent.com/ivanceras/sakila/master/csv-sakila-db/customer.csv")
+payment <- read.csv("https://raw.githubusercontent.com/ivanceras/sakila/master/csv-sakila-db/payment_p2007_01.csv")
+
+# Copy data.frames to database
+dbWriteTable(con, "actor", actor)
+dbWriteTable(con, "rental", rental)
+dbWriteTable(con, "customer", customer)
+dbWriteTable(con, "payment", payment)
+```
+
+```{r}
+dbListTables(con)
+```
+
+```{sql connection=con}
+PRAGMA table_info(actor)
+```
+
+# Ex1
+```{sql connection=con}
+SELECT actor_id, first_name, last_name
+FROM actor
+ORDER by last_name, first_name
+```
+
+# Ex2
+```{sql connection=con}
+SELECT actor_id, first_name, last_name
+FROM actor
+WHERE last_name IN ('WILLIAMS', 'DAVIS')
+```
+
+# Ex3
+```{sql connection=con}
+PRAGMA table_info(rental)
+```
+
+```{sql connection=con}
+SELECT DISTINCT customer_id
+FROM rental AS a
+WHERE date(a.rental_date) = '2005-07-05'
+```
+
+# Ex4
+```{sql connection=con}
+PRAGMA table_info(payment)
+```
+## Ex4.1
+```{sql connection=con}
+SELECT *
+FROM payment
+WHERE amount IN (1.99, 7.99, 9.99)
+```
+
+## Ex4.2
+```{sql connection=con}
+SELECT *
+FROM payment
+WHERE amount > 5
+```
+## Ex4.3
+```{sql connection=con}
+SELECT *
+FROM payment
+WHERE amount > 5 AND 8 > amount
+```
+
+# Ex5
+```{sql connection=con}
+SELECT a.payment_id, a.amount
+FROM payment AS a
+  INNER JOIN customer AS b 
+    ON a.customer_id = b.customer_id
+WHERE b.last_name = "DAVIS"
+```
+
+# Ex6
+## Ex6.1
+```{sql connection=con}
+SELECT count(*) as cnt
+FROM rental
+```
+## Ex6.2
+```{sql connection=con}
+SELECT customer_id, count(*) as cnt
+FROM rental
+GROUP BY customer_id
+```
+## Ex6.3
+```{sql connection=con}
+SELECT customer_id, count(*) as cnt
+FROM rental
+GROUP BY customer_id
+ORDER BY cnt DESC
+```
+## Ex6.4
+```{sql connection=con}
+SELECT customer_id, count(*) as cnt
+FROM rental
+GROUP BY customer_id
+HAVING cnt >= 40
+ORDER BY cnt DESC
+```
+# Ex7
+```{sql connection=con}
+SELECT
+  MAX(amount) as Max,
+  MIN(amount) as Min,
+  AVG(amount) as Average
+FROM payment
+```
+## Ex7.1
+```{sql connection=con}
+SELECT
+  customer_id,
+  MAX(amount) as Max,
+  MIN(amount) as Min,
+  AVG(amount) as Average
+FROM payment
+GROUP BY customer_id
+```
+## Ex7.2
+```{sql connection=con}
+SELECT
+  customer_id,
+  MAX(amount) as Max,
+  MIN(amount) as Min,
+  AVG(amount) as Average
+FROM payment
+GROUP BY customer_id
+HAVING count(*) > 5
+```
+
+# Cleanup
+```{r}
+# clean up
+dbDisconnect(con)
+```
+
