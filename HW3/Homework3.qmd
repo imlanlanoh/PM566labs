@@ -1,0 +1,259 @@
+---
+title: "Homework 3 - Text Mining"
+author: "Chih-Chan (Jessica) Lan"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+```{r}
+# Download
+pubmed <- read.csv("https://raw.githubusercontent.com/USCbiostats/data-science-data/master/03_pubmed/pubmed.csv")
+```
+
+```{r, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(tidytext)
+library(patchwork)
+library(knitr)
+library(kableExtra)
+library(tibble)
+library(textdata)
+library(DT)
+library(plotly)
+```
+# Text Mining
+## Question 1
+```{r}
+term_table <- as.data.frame(table(pubmed$term))
+
+colnames(term_table) <- c("Term", "Count")
+
+kable(term_table, caption = "Frequency of Terms in PubMed Dataset") %>%
+  kable_styling(full_width = F, position = "center", bootstrap_options = c("striped", "hover"))
+```
+
+The number of abstracts related to each term is presented in the upper table.
+```{r}
+pubmed %>%
+  unnest_tokens(token, abstract) %>%
+  group_by(token) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n))
+```
+
+```{r}
+pubmed %>%
+  unnest_tokens(token, abstract) %>%
+  count(term, token, sort = TRUE) %>%
+  group_by(term) %>%
+  top_n(5, n) %>%
+  arrange(term, desc(n)) %>%
+  datatable(
+    caption = "Top 5 Tokens per Search Term",
+    options = list(pageLength = 10, autoWidth = TRUE),
+    rownames = FALSE
+  )
+```
+
+The number of abstracts related to each search term is presented in the upper table. Among all the abstracts, the six most frequent tokens are common stop words such as “the,” “of,” “and,” “in,” “to,” and “a.” When further classified by search term, the top five most common tokens remain largely the same as these overall common words. However, for *COVID*, “covid” and “19” appear among the top five tokens, and for *prostate cancer*, the tokens “cancer” and “prostate” also appear in the top five.
+
+## Question 2
+```{r, include=FALSE}
+stop_words %>%
+  filter(lexicon == "snowball") %>%
+  pull(word)
+```
+
+```{r}
+pubmed %>%
+  unnest_tokens(token, abstract) %>%
+  anti_join(stop_words, by = c("token" = "word")) %>%
+  count(token, sort = TRUE) %>%
+  top_n(10, n) %>%
+  datatable(
+    caption = "Top 10 Tokens after removing stop words",
+    options = list(pageLength = 10, autoWidth = TRUE),
+    rownames = FALSE
+  )
+```
+
+```{r}
+pubmed %>%
+  unnest_tokens(token, abstract) %>%
+  anti_join(stop_words, by = c("token" = "word")) %>%
+  group_by(term) %>%
+  count(token, sort = TRUE) %>%
+  top_n(5, n) %>%
+  arrange(term, desc(n)) %>%
+  datatable(
+    caption = "Top 5 Tokens per Search Term (stop words removed)",
+    options = list(pageLength = 10, autoWidth = TRUE),
+    rownames = FALSE
+  )
+```
+
+Yes. After removing stop words, the most frequent tokens across all abstracts become “covid,” “19,” “patients,” “cancer,” and “prostate,” which directly reflect the main research topics represented in the dataset. Since the search term *COVID* has the largest number of abstracts (n = 981), followed by *prostate cancer* (n = 787), the overall token frequencies also follow this distribution pattern.
+
+When examining the top five tokens for each individual search term, the changes are most evident in topics with fewer abstracts, such as *cystic fibrosis*, *meningitis*, and *preeclampsia.* After removing stop words, their top tokens shift toward more clinically relevant terms, better reflecting the specific content of those abstracts.
+
+## Question 3
+```{r}
+pubmed %>%
+  unnest_ngrams(ngram, abstract, n = 2) %>%
+  count(ngram, sort = TRUE) %>%
+  top_n(10, n) %>%
+  ggplot(aes(n, fct_reorder(ngram, n))) +
+  geom_col(fill = "#5DADE2", alpha = 0.8) +
+  theme_classic() +
+  labs(
+    title = "Top 10 Most Frequent Bigrams in PubMed Abstracts",
+    x = "Frequency (Number of Occurrences)",
+    y = "Bigram"
+  )
+
+```
+
+## Question 4
+```{r}
+pubmed %>%
+  unnest_tokens(token, abstract) %>%
+  count(term, token) %>%
+  bind_tf_idf(token, term, n) %>%
+  group_by(term) %>%
+  top_n(5, tf_idf) %>%
+  arrange(term, desc(tf_idf)) %>%
+  mutate(
+    tf = round(tf, 4),
+    idf = round(idf, 4),
+    tf_idf = round(tf_idf, 4)
+  ) %>%
+  datatable(
+    caption = "Top 5 tokens with the highest TF–IDF scores for each search term",
+    options = list(pageLength = 10, autoWidth = TRUE),
+    rownames = FALSE
+  )
+```
+
+Tokens with high TF–IDF values represent words that are particularly characteristic or unique to each search term. Consequently, tokens with higher TF–IDF scores for each topic highlight the distinctive symptoms or features associated with that condition.
+
+For instance, within the *COVID* abstracts, the tokens “pandemic” and “sars” appear among the top five, reflecting key aspects of the disease. The token “covid” itself has the highest TF–IDF value, which is intuitive since other disease topics are unlikely to contain this term during the same search period.
+
+In the *cystic fibrosis* group, “sweat” ranks fifth, which is notable because the sweat test is a common and distinctive diagnostic method for this condition. Similarly, in the *meningitis* group, the token “pachymeningitis” appears, capturing a specific subtype of the disease.
+
+Overall, more general words such as “patients” have lower TF–IDF scores and therefore do not appear among the top five tokens, as they occur frequently across multiple topics and lack discriminative value.
+
+# Sentiment Analysis
+## Question 5
+```{r}
+pubmed %>%
+  unnest_tokens(word, abstract) %>%
+  inner_join(get_sentiments('nrc')) %>%
+  count(term, sentiment, name = "n", sort = TRUE) %>%
+  group_by(term) %>%
+  arrange(term, desc(n)) %>%
+  datatable(
+    caption = "Distribution of NRC sentiment categories across search terms",
+    options = list(pageLength = 10, autoWidth = TRUE),
+    rownames = FALSE
+  ) 
+```
+
+```{r}
+pubmed %>%
+  unnest_tokens(word, abstract) %>%
+  inner_join(get_sentiments('nrc')) %>%
+  filter(!(sentiment %in% c("positive", "negative"))) %>%
+  count(term, sentiment, name = "n", sort = TRUE) %>%
+  group_by(term) %>%
+  arrange(term, desc(n)) %>%
+  datatable(
+    caption = "Distribution of NRC sentiment categories across search terms (removed positive and negative)",
+    options = list(pageLength = 10, autoWidth = TRUE),
+    rownames = FALSE
+  )
+```
+
+Using the *NRC lexicon*, which classifies words into ten sentiment categories, the most common sentiment for each search term was identified. Overall, *COVID*, *cystic fibrosis*, and *preeclampsia* show positive as the most frequent sentiment, while *meningitis* and *prostate cancer* show negative as the most common.
+
+After removing the general positive and negative categories, the emotional patterns become more distinct. The most common emotion for *COVID* and *meningitis* is fear, while *cystic fibrosis* shows disgust as the most frequent emotion. For *preeclampsia*, anticipation becomes dominant, which may reflect research focused on early detection and prevention. Lastly, *prostate cancer* remains strongly associated with fear.
+
+These results show that more specific emotions can capture the tone and context of the abstracts for each disease topic.
+
+## Question 6
+```{r}
+pubmed %>%
+  group_by(term) %>%
+  mutate(abs_id = row_number()) %>%
+  ungroup() %>%
+  unnest_tokens(word, abstract) %>%
+  inner_join(get_sentiments('afinn')) %>%
+  group_by(term, abs_id) %>%
+  summarise(avg = mean(value)) %>%
+  
+  ggplot(aes(x = term, y = avg, fill = term)) +
+  geom_violin(alpha = 0.4, color = "gray30") +
+  geom_boxplot(width = 0.15, alpha = 0.8, outlier.shape = NA) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Average Positivity Score per Abstract by Search Term",
+    x = "Search Term",
+    y = "Average Positivity Score"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+    plot.subtitle = element_text(size = 11, hjust = 0.5),
+    axis.text.x = element_text(angle = 15, vjust = 0.8)
+  )  
+```
+
+Using the *AFINN lexicon*, I computed an average positivity score for each abstract (mean of token scores within that abstract) and plotted the distributions by search term.
+
+From the violin plot, *cystic fibrosis* shows the highest average positivity score. The other four search terms (*COVID*, *meningitis*, *preeclampsia*, and *prostate cancer*) have averages close to zero, indicating a more neutral tone overall.
+
+Among them, *meningitis* shows the widest range of scores, reflecting a mix of both negative and positive expressions, while *prostate cancer* has the most concentrated distribution around zero.
+
+
+```{r}
+# 1) per-abstract AFINN average + hover string for points
+afinn_avg <- pubmed %>%
+  group_by(term) %>% mutate(abs_id = row_number()) %>% ungroup() %>%
+  unnest_tokens(word, abstract) %>%
+  inner_join(get_sentiments("afinn"), by = join_by(word == word)) %>%
+  group_by(term, abs_id) %>%
+  summarise(avg = mean(value), .groups = "drop") %>%
+  mutate(hover = sprintf(
+    "Search Term: %s<br>Abstract ID: %s<br>Average Positivity Score: %.2f",
+    term, abs_id, avg
+  ))
+
+# 2) ggplot: box + jitter (jitter carries the hover text)
+gg <-
+ggplot(afinn_avg, aes(x = term, y = avg, fill = term, text = hover)) +
+  geom_boxplot(width = 0.16, alpha = 0.85, outlier.shape = NA, color = "gray30") +
+  geom_jitter(width = 0.08, height = 0, size = 1.2, alpha = 0.28, stroke = 0.1) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Average Positivity Score per Abstract by Search Term",
+    x = "Search Term", y = "Average Positivity Score"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+    axis.text.x = element_text(angle = 15, vjust = 0.8)
+  )
+
+# 3) to plotly: use only `text` for point hovers; customize box hovers
+p <- ggplotly(gg, tooltip = "text")
+
+
+p
+
+```
+
