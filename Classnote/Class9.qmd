@@ -1,0 +1,40 @@
+---
+title: "Class 9"
+format: html
+editor: visual
+---
+```{r}
+library(DBI)
+library(RSQLite)
+library(dplyr)
+con <- dbConnect(RSQLite::SQLite(), ":memory:")
+copy_to(con, palmerpenguins::penguins, "penguins")
+
+```
+
+
+```{r}
+library(palmerpenguins)
+
+head(as.data.frame(palmerpenguins::penguins))
+
+```
+```{sql connection=con, output.var="x1"}
+SELECT a.bill_length_mm, a.bill_depth_mm
+FROM
+  (SELECT species, bill_length_mm, bill_depth_mm
+   FROM penguins
+   WHERE species = 'Adelie'
+  ) AS a
+```
+
+```{sql connection=con, output.var="x1"}
+SELECT a.bill_length_mm, a.bill_depth_mm
+FROM penguins AS a
+WHERE species = 'Adelie'
+```
+
+```{r}
+x1
+```
+
