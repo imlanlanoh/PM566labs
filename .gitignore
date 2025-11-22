@@ -15,13 +15,14 @@ _cache/
 
 # Quarto/R Markdown output
 # *.html
-# *.pdf
+*.pdf
 *.docx
 
 # Data files
 *.gz
 *.csv
 *.rds
+*.zip
 
 # Temporary files
 .DS_Store
